@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veri Sıfırlama</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #111827;
+            margin: 0 0 16px 0;
+        }
+        p {
+            color: #6B7280;
+            margin: 0 0 24px 0;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #0051D5;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,122,255,0.3);
+        }
+        .success {
+            display: none;
+            color: #34C759;
+            font-weight: 600;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Veri Sıfırlama</h1>
+        <p>Bu işlem tüm localStorage verilerini temizleyecek ve uygulamayı Haziran 2026 tarihli güncel verilerle yeniden başlatacaktır.</p>
+        <button onclick="clearData()">Verileri Sıfırla ve Yeniden Başlat</button>
+        <div class="success" id="success">✓ Veriler temizlendi! Ana sayfaya yönlendiriliyorsunuz...</div>
+    </div>
+
+    <script>
+        function clearData() {
+            localStorage.clear(); // Clear all localStorage including version
+            document.getElementById('success').style.display = 'block';
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
