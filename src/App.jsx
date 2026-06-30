@@ -3,9 +3,11 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Planning from './pages/Planning';
+import DragDropCalendar from './pages/DragDropCalendar';
 import Employees from './pages/Employees';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Birthdays from './pages/Birthdays';
 import { getEmployees } from './data/mockData';
 
 function App() {
@@ -15,19 +17,17 @@ function App() {
   useEffect(() => {
     // Check data version and reset if needed
     const dataVersion = localStorage.getItem('dataVersion');
-    const CURRENT_VERSION = '2026-06-fix'; // June 2026 - Fixed Manager
+    const CURRENT_VERSION = '2026-06-optimized'; // June 2026 - Optimized Performance
     
     if (dataVersion !== CURRENT_VERSION) {
-      console.log('🔄 Updating data with Hasan Cavit Koçak as manager...');
+      console.log('🔄 Updating data with optimized version...');
       localStorage.clear(); // Clear all old data
       localStorage.setItem('dataVersion', CURRENT_VERSION);
-      window.location.reload();
-      return;
+      // DON'T RELOAD - just continue
     }
     
-    console.log('✅ Running with June 2026 data');
+    console.log('✅ Running with optimized data');
     console.log('👤 Manager: Hasan Cavit Koçak');
-    console.log('💡 To reset data: localStorage.clear(); location.reload();');
 
     // Use fixed manager - Hasan Cavit Koçak (id: 1)
     const employees = getEmployees();
@@ -64,8 +64,12 @@ function App() {
         return <Dashboard />;
       case '/planning':
         return <Planning currentUser={currentUser} />;
+      case '/calendar-planning':
+        return <DragDropCalendar currentUser={currentUser} />;
       case '/employees':
         return <Employees />;
+      case '/birthdays':
+        return <Birthdays />;
       case '/reports':
         return <Reports />;
       case '/settings':

@@ -70,7 +70,7 @@ const generateEmployees = () => {
   employees.push(mainManager);
   
   // Then create other managers
-  for (let i = 1; i < 100; i++) {
+  for (let i = 1; i < 8; i++) { // Reduced from 100 to 8 managers
     const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     const birthDate = getRandomDate(new Date(1975, 0, 1), new Date(1990, 11, 31));
@@ -106,7 +106,7 @@ const generateEmployees = () => {
   }
   
   // Then create regular employees
-  for (let i = 100; i < 1000; i++) {
+  for (let i = 8; i < 50; i++) { // Reduced from 1000 to 50 total employees
     const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     const manager = managers[Math.floor(Math.random() * (managers.length - 1)) + 1]; // Not main manager
@@ -140,6 +140,62 @@ const generateEmployees = () => {
     
     employees.push(employee);
   }
+  
+  // Add specific birthday employees for different dates (May 16, 17, 18, 19, 20)
+  const birthdayPeople = [
+    { date: '1990-05-16', firstName: 'Ahmet', lastName: 'Yılmaz', dept: 'Yazılım', position: 'Kıdemli Yazılım Uzmanı' },
+    { date: '1992-05-16', firstName: 'Büşra', lastName: 'Öztürk', dept: 'İnsan Kaynakları', position: 'İK Uzmanı' },
+    { date: '1988-05-16', firstName: 'Cemal', lastName: 'Demir', dept: 'Finans', position: 'Finans Uzmanı' },
+    { date: '1995-05-16', firstName: 'Deniz', lastName: 'Kaya', dept: 'Satış', position: 'Satış Temsilcisi' },
+    { date: '1991-05-16', firstName: 'Emre', lastName: 'Çelik', dept: 'Üretim', position: 'Üretim Mühendisi' },
+    { date: '1993-05-16', firstName: 'Fatma', lastName: 'Arslan', dept: 'Satın Alma', position: 'Satın Alma Uzmanı' },
+    { date: '1989-05-16', firstName: 'Murat', lastName: 'Koç', dept: 'Lojistik', position: 'Lojistik Sorumlusu' },
+    
+    { date: '1987-05-17', firstName: 'Selin', lastName: 'Güneş', dept: 'Pazarlama', position: 'Pazarlama Uzmanı' },
+    { date: '1994-05-17', firstName: 'Tolga', lastName: 'Akın', dept: 'Bilgi Teknolojileri', position: 'Sistem Yöneticisi' },
+    { date: '1990-05-17', firstName: 'Ufuk', lastName: 'Yıldız', dept: 'Ar-Ge', position: 'Ar-Ge Uzmanı' },
+    
+    { date: '1986-05-18', firstName: 'Elif', lastName: 'Şahin', dept: 'Müşteri Hizmetleri', position: 'Müşteri Temsilcisi' },
+    { date: '1992-05-18', firstName: 'Furkan', lastName: 'Aydın', dept: 'Operasyon', position: 'Operasyon Uzmanı' },
+    { date: '1991-05-18', firstName: 'Gül', lastName: 'Erdoğan', dept: 'İnsan Kaynakları', position: 'İK Müdür Yardımcısı' },
+    
+    { date: '1989-05-19', firstName: 'Hakan', lastName: 'Polat', dept: 'Satış', position: 'Satış Müdürü' },
+    { date: '1993-05-19', firstName: 'İrem', lastName: 'Kılıç', dept: 'Finans', position: 'Mali Müşavir' },
+    
+    { date: '1988-05-20', firstName: 'Can', lastName: 'Uzun', dept: 'Bilgi Teknolojileri', position: 'Yazılım Mimarı' },
+    { date: '1994-05-20', firstName: 'Zeynep', lastName: 'Keskin', dept: 'Pazarlama', position: 'Dijital Pazarlama Uzmanı' },
+  ];
+  
+  birthdayPeople.forEach((person, index) => {
+    const id = 50 + index + 1;
+    const employee = {
+      id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      email: `${person.firstName.toLowerCase()}.${person.lastName.toLowerCase()}@company.com`,
+      phone: `+90 532 ${Math.floor(Math.random() * 900 + 100)} ${Math.floor(Math.random() * 90 + 10)} ${Math.floor(Math.random() * 90 + 10)}`,
+      department: person.dept,
+      position: person.position,
+      managerId: 2,
+      isManager: false,
+      birthDate: person.date,
+      hireDate: format(getRandomDate(new Date(2015, 0, 1), new Date(2023, 11, 31)), 'yyyy-MM-dd'),
+      annualLeave: {
+        previousBalance: Math.floor(Math.random() * 10),
+        currentYearAllocation: 14 + Math.floor(Math.random() * 6),
+        used: Math.floor(Math.random() * 5),
+        planned: 0,
+        available: 0
+      }
+    };
+    
+    employee.annualLeave.available = 
+      employee.annualLeave.previousBalance + 
+      employee.annualLeave.currentYearAllocation - 
+      employee.annualLeave.used;
+    
+    employees.push(employee);
+  });
   
   return employees;
 };
@@ -449,6 +505,19 @@ export const getTodaysBirthdays = () => {
     const birthDateStr = format(new Date(employee.birthDate), 'MM-dd');
     return birthDateStr === todayStr;
   });
+};
+
+// Get birthdays by specific date
+export const getBirthdaysByDate = (date) => {
+  const dateStr = format(date, 'MM-dd');
+  
+  return employeesData.filter(employee => {
+    const birthDateStr = format(new Date(employee.birthDate), 'MM-dd');
+    return birthDateStr === dateStr;
+  }).map(employee => ({
+    ...employee,
+    birthDate: format(new Date(employee.birthDate), 'dd.MM.yyyy')
+  }));
 };
 
 // Statistics

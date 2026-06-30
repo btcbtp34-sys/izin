@@ -52,42 +52,6 @@ const Dashboard = () => {
         <p className="page-subtitle">İzin yönetim sistemi genel görünümü</p>
       </div>
 
-      {/* Birthday Banner */}
-      {birthdays.length > 0 && (
-        <div className="birthday-banner">
-          <div className="birthday-content">
-            <div className="birthday-header">
-              <Cake size={32} />
-              <h2 className="birthday-title">Bugün Doğanlar</h2>
-            </div>
-            <div className="birthday-list">
-              {birthdays.map(person => (
-                <div key={person.id} className="birthday-card">
-                  <div className="birthday-avatar">
-                    {person.firstName.charAt(0)}
-                  </div>
-                  <div className="birthday-info">
-                    <h4>{person.firstName} {person.lastName}</h4>
-                    <p>{person.department}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {birthdays.length === 0 && (
-        <div className="birthday-banner">
-          <div className="birthday-content">
-            <div className="birthday-header">
-              <Cake size={32} />
-              <h2 className="birthday-title">Bugün Doğanlar</h2>
-            </div>
-            <p className="no-birthdays">Bugün doğum günü kutlaması yok</p>
-          </div>
-        </div>
-      )}
 
       {/* Stats Grid */}
       <div className="stats-grid">

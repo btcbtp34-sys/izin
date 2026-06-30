@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Home, Calendar, Users, BarChart3, Settings, 
-  Menu, X, Bell, Search, User, LogOut 
+  Menu, X, Bell, Search, User, LogOut, CalendarCheck, Cake
 } from 'lucide-react';
 import './Layout.css';
 
@@ -12,6 +12,8 @@ const Layout = ({ children, currentUser, onLogout }) => {
   const menuItems = [
     { icon: Home, label: 'Ana Sayfa', path: '/' },
     { icon: Calendar, label: 'İzin Planlama', path: '/planning' },
+    { icon: CalendarCheck, label: 'Takvim Planlama', path: '/calendar-planning' },
+    { icon: Cake, label: 'Bugün Doğanlar', path: '/birthdays' },
     { icon: Users, label: 'Çalışanlar', path: '/employees' },
     { icon: BarChart3, label: 'Raporlar', path: '/reports' },
     { icon: Settings, label: 'Ayarlar', path: '/settings' }

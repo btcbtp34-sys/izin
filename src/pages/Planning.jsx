@@ -294,19 +294,6 @@ const Planning = ({ currentUser }) => {
         <p className="page-subtitle">Yıllık izin planlaması ve takibi</p>
       </div>
 
-      {/* Auto Planning Banner */}
-      <div className="auto-plan-section">
-        <div className="auto-plan-content">
-          <div className="auto-plan-text">
-            <h3>Otomatik İzin Planlaması</h3>
-            <p>Yapay zeka destekli otomatik planlama ile izinleri optimize edin</p>
-          </div>
-          <button className="btn-white" onClick={handleAutoPlanning}>
-            <Sparkles size={20} />
-            Otomatik Planla
-          </button>
-        </div>
-      </div>
 
       {/* Summary Cards */}
       <div className="summary-section">
