@@ -10,12 +10,12 @@ import {
 import {
   getEmployees, getLeaveRequests, addLeaveRequest, updateLeaveRequest,
   deleteLeaveRequest, leaveStatuses, COLLAR_TYPES, DEMO_USERS,
-  validateAndApplyRules, calculateLeaveDays, addWorkingDays
+  validateAndApplyRules, calculateLeaveDays, addWorkingDays, getEmployeeShortLeavesCount
 } from '../data/mockData';
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth,
   eachDayOfInterval, isSameMonth, isToday, isSameDay, addDays, getDay,
-  differenceInCalendarDays
+  differenceInCalendarDays, parseISO
 } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { 
@@ -25,6 +25,95 @@ import {
   RuleNoticeModal, RuleDirectoryModal, CustomConfirmModal
 } from '../components/RuleModals';
 import './Planning.css';
+
+/**
+ * Türk Standardı Tarih Girişi (Gün / Ay / Yıl)
+ * Tarayıcının İngilizce 'mm/dd/yyyy' dayatmasını engelleyerek
+ * kullanıcının her zaman 'GG.AA.YYYY' formatında tarih girmesini ve görmesini sağlar.
+ */
+const TurkishDateInput = ({ label, value, onChange, min, required = true }) => {
+  const parseDisplay = (val) => {
+    if (!val) return '';
+    try {
+      const parts = val.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}.${parts[1]}.${parts[0]}`;
+      }
+      return val;
+    } catch {
+      return val;
+    }
+  };
+
+  const [textInput, setTextInput] = useState(parseDisplay(value));
+
+  useEffect(() => {
+    setTextInput(parseDisplay(value));
+  }, [value]);
+
+  const handleTextChange = (e) => {
+    const raw = e.target.value;
+    setTextInput(raw);
+    const parts = raw.split(/[./-]/);
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const year = parseInt(parts[2], 10);
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 2020 && year <= 2035) {
+        const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        onChange(iso);
+      }
+    }
+  };
+
+  const handleNativePicker = (e) => {
+    if (e.target.value) {
+      onChange(e.target.value);
+    }
+  };
+
+  const getDayName = (isoVal) => {
+    if (!isoVal) return '';
+    try {
+      return format(new Date(isoVal + 'T00:00:00'), 'EEEE', { locale: tr });
+    } catch {
+      return '';
+    }
+  };
+
+  return (
+    <div className="form-group turkish-date-group">
+      <label className={`form-label ${required ? 'required' : ''}`}>
+        {label} <span className="format-hint-tag">Gün.Ay.Yıl</span>
+      </label>
+      <div className="turkish-date-control-wrap">
+        <input
+          type="text"
+          className="input turkish-date-text"
+          placeholder="GG.AA.YYYY"
+          value={textInput}
+          onChange={handleTextChange}
+          required={required}
+        />
+        <label className="calendar-picker-btn" title="Takvimden Seç">
+          <Calendar size={18} />
+          <input
+            type="date"
+            className="native-date-hidden-picker"
+            value={value || ''}
+            min={min || undefined}
+            onChange={handleNativePicker}
+          />
+        </label>
+      </div>
+      {value && (
+        <div className="date-preview-pill">
+          <span>📅 {parseDisplay(value)} ({getDayName(value)})</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUser }) => {
   // Varsayılan ay: Görseldeki gibi Temmuz 2026 (Month index: 6)
@@ -58,6 +147,10 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   // Tablo yatay kaydırma referansı
   const timelineScrollRef = useRef(null);
 
+  // Dinamik Durumlar: Çalışanlar ve İzin Talepleri
+  const [employees, setEmployees] = useState(() => getEmployees());
+  const [allRequests, setAllRequests] = useState(() => getLeaveRequests());
+
   // Form Verisi
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -67,9 +160,6 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     reason: '',
     status: leaveStatuses.PLANNED
   });
-
-  const employees = getEmployees();
-  const allRequests = getLeaveRequests();
 
   // Bildirim göster
   const showToast = (message, type = 'success') => {
@@ -180,6 +270,26 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     setShowModal(true);
   };
 
+  // Tüm izin ve çalışan verilerini anlık senkronize eden fonksiyon
+  const refreshDataState = () => {
+    setAllRequests([...getLeaveRequests()]);
+    setEmployees([...getEmployees()]);
+    setRefreshKey(prev => prev + 1);
+  };
+
+  // Seçili çalışanın kısa süreli (1 günlük) izin geçmişi ve kalan hakkı (Ön yüz canlı sayaç)
+  const shortLeavesCount = useMemo(() => {
+    if (!formData.employeeId) return 0;
+    return getEmployeeShortLeavesCount(formData.employeeId, editingRequest?.id, allRequests);
+  }, [formData.employeeId, editingRequest, allRequests, refreshKey]);
+
+  // Ön yüz canlı kural kontrolü (Tarihler veya çalışan değiştiğinde anlık denetler)
+  const liveValidation = useMemo(() => {
+    if (!formData.employeeId || !formData.startDate || !formData.endDate) return null;
+    const emp = employees.find(e => e.id === parseInt(formData.employeeId));
+    return validateAndApplyRules(formData, getLeaveRequests(), emp);
+  }, [formData.employeeId, formData.startDate, formData.endDate, employees, refreshKey]);
+
   // İzin Formu Kaydet (Kuralları Uygula)
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -192,7 +302,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     if (!employee) return;
 
     // KURALLARI DENETLE VE UYGULA (Kural 4, 5, 6, 7 vb.)
-    const validation = validateAndApplyRules(formData, relevantRequests, employee);
+    const validation = validateAndApplyRules(formData, getLeaveRequests(), employee);
     if (!validation.isValid) {
       // Chrome alert YERİNE özel şık Kural Pop-up ekranı
       setRulePopup({
@@ -227,12 +337,28 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     };
 
     if (editingRequest) {
-      updateLeaveRequest(editingRequest.id, requestData);
+      const updated = updateLeaveRequest(editingRequest.id, requestData);
+      if (updated && updated.error) {
+        showToast(updated.error, 'error');
+        return;
+      }
       showToast('İzin planı güncellendi ve tekrar onaya sunuldu!');
     } else {
-      addLeaveRequest(requestData);
+      const created = addLeaveRequest(requestData);
+      if (created && created.isValid === false) {
+        setRulePopup({
+          type: 'error',
+          title: 'Planlama Kuralı Kısıtlaması',
+          subtitle: `${employee.firstName} ${employee.lastName} için girilen izin şirket iş kuralına takıldı.`,
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          error: created.error
+        });
+        return;
+      }
       showToast('Yeni izin planı başarıyla oluşturuldu!');
     }
+
+    refreshDataState();
 
     // Kural otomatik uygulama bildirimleri varsa Chrome alert yerine özel pop-up aç
     if (validation.notices && validation.notices.length > 0) {
@@ -252,7 +378,6 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
 
     setShowModal(false);
     setEmployeeSearch('');
-    setRefreshKey(prev => prev + 1);
   };
 
   // İzin Onaylama Pop-up Tetikleme
@@ -289,7 +414,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     }
     setRequestToApprove(null);
     setShowRequestDetail(false);
-    setRefreshKey(prev => prev + 1);
+    refreshDataState();
     showToast(`${requestToApprove.employeeName} için izin onaylandı!`, 'success');
   };
 
@@ -317,7 +442,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     }
     setRequestToReject(null);
     setShowRequestDetail(false);
-    setRefreshKey(prev => prev + 1);
+    refreshDataState();
     showToast(`${requestToReject.employeeName} için izin revize edilmek üzere geri gönderildi.`, 'warning');
   };
 
@@ -347,7 +472,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     }
     setRequestToResubmit(null);
     setShowRequestDetail(false);
-    setRefreshKey(prev => prev + 1);
+    refreshDataState();
     showToast(`${requestToResubmit.employeeName} için izin tarihleri güncellendi ve tekrar onaya sunuldu!`);
   };
 
@@ -366,7 +491,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
       onConfirm: () => {
         deleteLeaveRequest(request.id);
         setShowRequestDetail(false);
-        setRefreshKey(prev => prev + 1);
+        refreshDataState();
         showToast('İzin planı silindi.');
       }
     });
@@ -399,7 +524,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
         plannedReqs.forEach(req => {
           updateLeaveRequest(req.id, { status: leaveStatuses.PENDING });
         });
-        setRefreshKey(prev => prev + 1);
+        refreshDataState();
         showToast(`${plannedReqs.length} izin talebi yönetici onayına gönderildi! Durum: Onay Bekliyor (Turuncu)`);
       }
     });
@@ -456,6 +581,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
       duration: validation.adjustedDuration
     });
 
+    refreshDataState();
+
     if (validation.notices && validation.notices.length > 0) {
       setRulePopup({
         type: 'notice',
@@ -474,13 +601,12 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     }
 
     setDraggedLeave(null);
-    setRefreshKey(prev => prev + 1);
   };
 
   // Otomatik Planlama Algoritması (Pazar günleri hariç iş günleri hesabı)
   const handleAutoPlanning = () => {
     const unplannedEmployees = filteredEmployees.filter(emp => {
-      const empRequests = relevantRequests.filter(r => r.employeeId === emp.id);
+      const empRequests = relevantRequests.filter(r => Number(r.employeeId) === Number(emp.id));
       return empRequests.length === 0;
     });
 
@@ -537,7 +663,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
       createdCount++;
     });
 
-    setRefreshKey(prev => prev + 1);
+    refreshDataState();
     showToast(`${createdCount} çalışan için kurallara uygun otomatik planlama oluşturuldu ve onaya sunuldu!`);
   };
 
@@ -562,7 +688,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     const monthEnd = endOfMonth(currentDate);
 
     const empRequests = relevantRequests.filter(r => {
-      if (r.employeeId !== employeeId) return false;
+      if (Number(r.employeeId) !== Number(employeeId)) return false;
       const rStart = new Date(r.startDate);
       const rEnd = new Date(r.endDate);
       return rStart <= monthEnd && rEnd >= monthStart;
@@ -588,13 +714,24 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     }).filter(Boolean);
   };
 
+  const getEmployeeAllPlannedDays = (employeeId) => {
+    const allEmpLeaves = allRequests.filter(r => 
+      Number(r.employeeId) === Number(employeeId) && 
+      r.status !== leaveStatuses.REJECTED &&
+      r.status !== 'Reddedildi'
+    );
+    return allEmpLeaves.reduce((sum, l) => sum + (Number(l.duration) || 0), 0);
+  };
+
   const getEmployeePlannedTotal = (employeeId) => {
-    const leaves = getEmployeeMonthLeaves(employeeId);
-    return leaves.reduce((sum, l) => sum + l.duration, 0);
+    return getEmployeeAllPlannedDays(employeeId);
   };
 
   const getEmployeeRemaining = (employee) => {
-    return employee.annualLeave?.available ?? 14;
+    const transferred = employee.annualLeave?.previousBalance ?? 0;
+    const earned = employee.annualLeave?.currentYearAllocation ?? 14;
+    const planned = getEmployeeAllPlannedDays(employee.id);
+    return Math.max(0, (transferred + earned) - planned);
   };
 
   return (
@@ -760,8 +897,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
               <th className="sticky-col col-emp" title="Çalışan">Çalışan</th>
               <th className="sticky-col col-transferred" title="Önceki Yıldan Devreden İzin Hakkı">Devreden</th>
               <th className="sticky-col col-earned" title="Mevcut Yıl Hak Edilen / Kazanılan İzin Hakkı">Kazanılan</th>
-              <th className="sticky-col col-planned" title="Planlanan İzin Gün Sayısı">Planlanan</th>
               <th className="sticky-col col-remaining" title="Kalan Toplam İzin Bakiyesi">Toplam Kalan</th>
+              <th className="sticky-col col-planned" title="Planlanan İzin Gün Sayısı">Planlanan</th>
 
               {monthDays.map((day) => {
                 const dayNum = format(day, 'dd');
@@ -822,12 +959,12 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                       <strong className="text-emerald-bold">{earnedDays}</strong>
                     </td>
 
-                    <td className="sticky-col col-planned planned-cell" title="Planlanan İzin">
-                      <strong className="text-amber-bold">{plannedDaysCount}</strong>
-                    </td>
-
                     <td className="sticky-col col-remaining remaining-cell" title="Toplam Kalan İzin">
                       <strong className="text-green-bold">{remainingDaysCount}</strong>
+                    </td>
+
+                    <td className="sticky-col col-planned planned-cell" title="Planlanan İzin">
+                      <strong className="text-amber-bold">{plannedDaysCount}</strong>
                     </td>
 
                     {/* Gün Hücreleri ve Gantt Barları (Pazar günleri hariç) */}
@@ -969,30 +1106,76 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                   </div>
                 </div>
 
-                {/* Tarih Aralığı */}
+                {/* Tarih Aralığı (Türkçe Gün/Ay/Yıl Standardı) */}
                 <div className="form-row-dates">
-                  <div className="form-group">
-                    <label className="form-label required">Başlangıç Tarihi</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required">Bitiş Tarihi</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={formData.endDate}
-                      min={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      required
-                    />
-                  </div>
+                  <TurkishDateInput
+                    label="Başlangıç Tarihi"
+                    value={formData.startDate}
+                    onChange={(val) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        startDate: val,
+                        endDate: prev.endDate && prev.endDate < val ? val : prev.endDate
+                      }));
+                    }}
+                    required
+                  />
+                  <TurkishDateInput
+                    label="Bitiş Tarihi"
+                    value={formData.endDate}
+                    min={formData.startDate}
+                    onChange={(val) => {
+                      setFormData(prev => ({ ...prev, endDate: val }));
+                    }}
+                    required
+                  />
                 </div>
+
+                {/* ÖN YÜZ CANLI İŞ KURALLARI VE KOTA BİLGİLENDİRMESİ */}
+                {formData.employeeId && (
+                  <div className="live-rule-validation-card">
+                    {/* Kısa Süreli İzin (1 Günlük) Kotası */}
+                    <div className="quota-summary-row">
+                      <div className="quota-info-item">
+                        <span className="quota-label">Kısa Süreli İzin (2 Günden Az):</span>
+                        <div className="quota-pill-badges">
+                          <span className={`quota-status-tag ${shortLeavesCount >= 4 ? 'tag-limit-reached' : shortLeavesCount === 3 ? 'tag-limit-warning' : 'tag-limit-ok'}`}>
+                            {shortLeavesCount}/4 Kullanıldı
+                          </span>
+                          <span className="quota-remaining-text">
+                            (Kalan: {Math.max(0, 4 - shortLeavesCount)} hak)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Canlı Kural İhlal Uyarısı (Varsa Kırmızı Kutu) */}
+                    {liveValidation && !liveValidation.isValid && (
+                      <div className="live-rule-alert alert-danger animate-fade-in">
+                        <AlertCircle size={18} className="alert-icon-svg" />
+                        <div className="alert-text-wrap">
+                          <strong className="alert-title">Kural Engeli:</strong>
+                          <span className="alert-desc">{liveValidation.error}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Canlı Kural Otomatik Uyarlama Bildirimleri (Cuma, Cumartesi vb.) */}
+                    {liveValidation && liveValidation.isValid && liveValidation.notices && liveValidation.notices.length > 0 && (
+                      <div className="live-rule-alert alert-info animate-fade-in">
+                        <Sparkles size={18} className="alert-icon-svg text-blue" />
+                        <div className="alert-text-wrap">
+                          <strong className="alert-title">Otomatik Kural Uyarlaması:</strong>
+                          <ul className="alert-notices-list">
+                            {liveValidation.notices.map((n, i) => (
+                              <li key={i}>{n}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Tür ve Durum */}
                 <div className="form-row-dates">
@@ -1046,8 +1229,15 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                 <button type="button" className="btn btn-modal-cancel" onClick={() => setShowModal(false)}>
                   İptal
                 </button>
-                <button type="submit" className="btn btn-modal-submit">
-                  {editingRequest ? 'Güncelle & Onaya Gönder' : 'Kaydet'}
+                <button 
+                  type="submit" 
+                  className={`btn btn-modal-submit ${liveValidation && !liveValidation.isValid ? 'btn-submit-disabled' : ''}`}
+                  disabled={Boolean(liveValidation && !liveValidation.isValid)}
+                  title={liveValidation && !liveValidation.isValid ? liveValidation.error : 'İzin planını kaydet'}
+                >
+                  {liveValidation && !liveValidation.isValid 
+                    ? 'Kural Engeli Var' 
+                    : (editingRequest ? 'Güncelle & Onaya Gönder' : 'Kaydet')}
                 </button>
               </div>
             </form>

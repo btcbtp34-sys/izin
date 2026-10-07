@@ -110,9 +110,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 10,
       currentYearAllocation: 28,
-      used: 5,
+      used: 0,
       planned: 0,
-      available: 33,
+      available: 38,
       futureAllocation: 8
     }
   },
@@ -130,9 +130,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 6,
       currentYearAllocation: 20,
-      used: 4,
+      used: 0,
       planned: 0,
-      available: 22,
+      available: 26,
       futureAllocation: 8
     }
   },
@@ -172,8 +172,8 @@ const initialEmployees = [
       previousBalance: 4,
       currentYearAllocation: 14,
       used: 0,
-      planned: 4,
-      available: 14,
+      planned: 3,
+      available: 15,
       futureAllocation: 8
     }
   },
@@ -190,9 +190,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 5,
       currentYearAllocation: 14,
-      used: 2,
-      planned: 5,
-      available: 12,
+      used: 0,
+      planned: 6,
+      available: 13,
       futureAllocation: 8
     }
   },
@@ -231,8 +231,8 @@ const initialEmployees = [
       previousBalance: 2,
       currentYearAllocation: 14,
       used: 0,
-      planned: 6,
-      available: 10,
+      planned: 5,
+      available: 11,
       futureAllocation: 8
     }
   },
@@ -249,9 +249,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 4,
       currentYearAllocation: 14,
-      used: 2,
+      used: 0,
       planned: 4,
-      available: 12,
+      available: 14,
       futureAllocation: 8
     }
   },
@@ -268,9 +268,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 7,
       currentYearAllocation: 14,
-      used: 3,
-      planned: 3,
-      available: 15,
+      used: 0,
+      planned: 0,
+      available: 21,
       futureAllocation: 8
     }
   },
@@ -287,9 +287,9 @@ const initialEmployees = [
     annualLeave: {
       previousBalance: 6,
       currentYearAllocation: 14,
-      used: 1,
-      planned: 5,
-      available: 14,
+      used: 0,
+      planned: 2,
+      available: 18,
       futureAllocation: 8
     }
   }
@@ -445,7 +445,7 @@ const initialRequests = [
 ];
 
 // LocalStorage yükleme
-const CURRENT_VERSION = '2026-07-no-sunday-v9';
+const CURRENT_VERSION = '2026-07-math-consistent-v12';
 
 const loadInitialData = () => {
   const savedVersion = localStorage.getItem('dataVersion');
@@ -474,6 +474,23 @@ export let leaveRequestsData = loaded.requests;
 // İŞ KURALLARI MOTORU (BUSINESS RULES ENGINE)
 // ========================================================
 /**
+ * Çalışanın bu yıl kullandığı / planladığı kısa süreli (2 günden az / 1 günlük) izin sayısını döner.
+ */
+export const getEmployeeShortLeavesCount = (employeeId, excludeRequestId = null, requests = null) => {
+  const empId = Number(employeeId);
+  const exId = excludeRequestId ? Number(excludeRequestId) : null;
+  const list = requests && requests.length > 0 ? requests : leaveRequestsData;
+  const items = list.filter(r => 
+    Number(r.employeeId) === empId && 
+    (exId === null || Number(r.id) !== exId) &&
+    (Number(r.duration) || calculateLeaveDays(r.startDate, r.endDate)) < 2 &&
+    r.status !== leaveStatuses.REJECTED &&
+    r.status !== 'Reddedildi'
+  );
+  return items.length;
+};
+
+/**
  * Kullanıcının ilettiği İş Kurallarını denetleyen ve gerekirse tarihleri otomatik düzelten motor:
  * 
  * Kural 1: Devir Kuralı - İlgili yılın hak edilen ve devreden izinleri üzerinden yapılır.
@@ -491,20 +508,22 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
   let endDate = new Date(requestData.endDate);
   const notices = [];
 
+  const reqEmpId = Number(requestData.employeeId);
+  const reqId = requestData.id ? Number(requestData.id) : null;
+  const requestsList = (allRequests && allRequests.length > 0) ? allRequests : leaveRequestsData;
+  const targetEmployee = employee || employeesData.find(e => Number(e.id) === reqEmpId);
+
   // Gün kontrolü: 0 = Pazar, 1 = Pazartesi, 2 = Salı, 3 = Çarşamba, 4 = Perşembe, 5 = Cuma, 6 = Cumartesi
   const originalEndDayOfWeek = getDay(endDate);
 
   // 1. KURAL 5: Cuma İzni Kontrolü
   // Cuma günü izin planlandığında Cumartesi günü de otomatik olarak plana eklenir.
-  // Örnek: Cuma günü izin seçildiğinde sistem Cumartesi gününü de plana ekler.
   if (originalEndDayOfWeek === 5) {
     endDate = addDays(endDate, 1);
     notices.push('Kural 5: Cuma günü izin seçildiğinde Cumartesi günü otomatik olarak plana eklendi.');
   } 
   // 2. KURAL 6: Cumartesi İzni Kontrolü
-  // Cumartesi günü izin planlandığında Pazartesi günü de otomatik olarak izin kapsamına alınır.
-  // Örnek: Cumartesi günü izin seçildiğinde sistem Pazartesi gününü de plana ekler (Pazar günleri haftalık tatildir ve sayılmaz).
-  // DİKKAT: Cuma kuralı çalıştıysa Kural 6 zincirleme olarak çalışmaz (else if), sadece kullanıcı doğrudan Cumartesi bitişli seçtiğinde çalışır.
+  // Cumartesi günü izin planlandığında Pazartesi günü de otomatik olarak plana eklenir (Pazar haftalık tatildir, sayılmaz).
   else if (originalEndDayOfWeek === 6) {
     endDate = addDays(endDate, 2);
     notices.push('Kural 6: Cumartesi günü izin seçildiğinde Pazartesi günü otomatik olarak plana eklendi (Pazar günleri sayılmaz).');
@@ -514,65 +533,81 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
   const duration = calculateLeaveDays(startDate, endDate);
 
   // 3. KURAL 7: Kısa Süreli İzin Limiti (2 günden az olan izinler yılda en fazla 4 kez)
-  // Örnek: Çalışan 1 günlük izni yıl içinde 4 kez kullandıysa 5. kez 1 günlük izin planlayamaz.
   if (duration < 2) {
-    const existingShortLeaves = (allRequests || []).filter(r => 
-      r.employeeId === requestData.employeeId && 
-      r.id !== requestData.id &&
-      r.duration < 2 &&
-      r.status !== leaveStatuses.REJECTED
-    );
+    const shortCount = getEmployeeShortLeavesCount(reqEmpId, reqId, requestsList);
 
-    if (existingShortLeaves.length >= 4) {
+    if (shortCount >= 4) {
       return {
         isValid: false,
-        error: `Kural 7 Engeli: 2 günden az olan izinler yılda en fazla 4 kez planlanabilir ve kullanılabilir. (Mevcut: ${existingShortLeaves.length}/4 limitine ulaşıldı).`
+        error: `Kural 7 Engeli: 2 günden az olan (1 günlük) izinler yılda en fazla 4 kez planlanabilir ve kullanılabilir. (Mevcut kullanılan: ${shortCount}/4 limitine ulaşıldı).`
       };
     } else {
-      notices.push(`Kural 7 Bilgisi: Bu yıl kullanılan kısa süreli izin sayısı: ${existingShortLeaves.length + 1}/4.`);
+      notices.push(`Kural 7 Bilgisi: Bu yıl kullanılan kısa süreli izin sayısı: ${shortCount + 1}/4.`);
     }
   }
 
-  // 4. KURAL 4: İki Adet 6 Günlük İzin (Aralarında en az 4 tam gün bulunmalıdır)
-  // Örnek: 01–06 Temmuz izin kullanıldıysa ikinci 6 günlük izin en erken 11 Temmuz'da başlayabilir.
-  if (duration === 6) {
-    const existingSixDayLeaves = (allRequests || []).filter(r => 
-      r.employeeId === requestData.employeeId && 
-      r.id !== requestData.id &&
-      r.duration === 6 &&
-      r.status !== leaveStatuses.REJECTED
+  // 4. KURAL 4: İki Adet 6 Günlük İzin (Aralarında en az 4 İŞ GÜNÜ bulunmalıdır)
+  if (duration >= 6) {
+    const existingSixDayLeaves = (requestsList || []).filter(r => 
+      Number(r.employeeId) === reqEmpId && 
+      (reqId === null || Number(r.id) !== reqId) &&
+      (Number(r.duration) || calculateLeaveDays(r.startDate, r.endDate)) >= 6 &&
+      r.status !== leaveStatuses.REJECTED &&
+      r.status !== 'Reddedildi'
     );
 
     for (const sixDayLeave of existingSixDayLeaves) {
       const otherStart = new Date(sixDayLeave.startDate);
       const otherEnd = new Date(sixDayLeave.endDate);
 
-      // İki izin aralığı arasındaki boş gün sayısı
-      let gap;
+      // İki izin aralığı arasındaki boş İŞ GÜNÜ sayısı (Pazar günleri sayılmaz)
+      let workingDaysGap = 0;
       if (startDate > otherEnd) {
-        gap = differenceInCalendarDays(startDate, otherEnd) - 1;
+        const gapStart = addDays(otherEnd, 1);
+        const gapEnd = subDays(startDate, 1);
+        if (gapStart <= gapEnd) {
+          workingDaysGap = calculateLeaveDays(gapStart, gapEnd);
+        } else {
+          workingDaysGap = 0;
+        }
       } else if (endDate < otherStart) {
-        gap = differenceInCalendarDays(otherStart, endDate) - 1;
+        const gapStart = addDays(endDate, 1);
+        const gapEnd = subDays(otherStart, 1);
+        if (gapStart <= gapEnd) {
+          workingDaysGap = calculateLeaveDays(gapStart, gapEnd);
+        } else {
+          workingDaysGap = 0;
+        }
       } else {
-        gap = 0; // Çakışıyor
+        workingDaysGap = 0; // Çakışıyor
       }
 
-      if (gap < 4) {
+      if (workingDaysGap < 4) {
         return {
           isValid: false,
-          error: `Kural 4 Engeli: Çalışan iki kez arka arkaya 6 günlük izin kullanabilir; ancak bu iki izin dönemi arasında en az 4 gün bulunmalıdır. (Mevcut 6 günlük izin: ${format(otherStart, 'dd.MM.yyyy')} - ${format(otherEnd, 'dd.MM.yyyy')}, aradaki boş gün: ${gap})`
+          error: `Kural 4 Engeli: Çalışan iki kez arka arkaya 6 günlük izin kullanabilir; ancak bu iki izin dönemi arasında en az 4 iş günü bulunmalıdır. (Mevcut 6 günlük izin: ${format(otherStart, 'dd.MM.yyyy')} - ${format(otherEnd, 'dd.MM.yyyy')}, aradaki iş günü: ${workingDaysGap} gün)`
         };
       }
     }
   }
 
-  // 5. KURAL 2: İzin Hakkı Önceliği (Önce kazanılmış hak, sonra devreden)
-  if (employee && employee.annualLeave) {
-    const available = employee.annualLeave.available || 14;
-    if (duration > available) {
+  // 5. KURAL 2: İzin Hakkı Önceliği & Kalan Bakiye Denetimi
+  if (targetEmployee && targetEmployee.annualLeave) {
+    const transferred = targetEmployee.annualLeave.previousBalance ?? 0;
+    const earned = targetEmployee.annualLeave.currentYearAllocation ?? 14;
+    const empExistingLeaves = (requestsList || []).filter(r => 
+      Number(r.employeeId) === reqEmpId && 
+      (reqId === null || Number(r.id) !== reqId) &&
+      r.status !== leaveStatuses.REJECTED &&
+      r.status !== 'Reddedildi'
+    );
+    const totalPlanned = empExistingLeaves.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+    const currentAvailable = Math.max(0, (transferred + earned) - totalPlanned);
+
+    if (duration > currentAvailable) {
       return {
         isValid: false,
-        error: `Yetersiz Bakiye: Talep edilen süre (${duration} gün), kalan izin bakiyesinden (${available} gün) fazladır.`
+        error: `Yetersiz Bakiye: Talep edilen süre (${duration} gün), kalan izin bakiyesinden (${currentAvailable} gün) fazladır.`
       };
     }
   }
@@ -586,17 +621,54 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
   };
 };
 
+// Çalışanların bakiyelerini izin taleplerine göre senkronize eden yardımcı
+export const syncEmployeeBalances = () => {
+  employeesData.forEach(emp => {
+    const transferred = emp.annualLeave?.previousBalance ?? 0;
+    const earned = emp.annualLeave?.currentYearAllocation ?? 14;
+    const empRequests = leaveRequestsData.filter(r => 
+      Number(r.employeeId) === emp.id && 
+      r.status !== leaveStatuses.REJECTED &&
+      r.status !== 'Reddedildi'
+    );
+    const totalPlanned = empRequests.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+    if (!emp.annualLeave) emp.annualLeave = {};
+    emp.annualLeave.planned = totalPlanned;
+    emp.annualLeave.available = Math.max(0, (transferred + earned) - totalPlanned);
+  });
+  localStorage.setItem('employees', JSON.stringify(employeesData));
+};
+
 // CRUD Operations
-export const getEmployees = () => employeesData;
+export const getEmployees = () => {
+  syncEmployeeBalances();
+  return employeesData;
+};
+
 export const getLeaveRequests = () => leaveRequestsData;
 
 export const addLeaveRequest = (request) => {
+  // Kuralları otomatik doğrula
+  const validation = validateAndApplyRules(request, leaveRequestsData);
+  if (!validation.isValid) {
+    console.warn('addLeaveRequest kural engeli:', validation.error);
+    return { ...request, isValid: false, error: validation.error };
+  }
+
+  const finalStartDate = validation.adjustedStartDate || request.startDate;
+  const finalEndDate = validation.adjustedEndDate || request.endDate;
+  const finalDuration = validation.adjustedDuration !== undefined ? validation.adjustedDuration : request.duration;
+
   const newRequest = {
     ...request,
+    startDate: finalStartDate,
+    endDate: finalEndDate,
+    duration: finalDuration,
     id: Math.max(0, ...leaveRequestsData.map(r => r.id)) + 1
   };
   leaveRequestsData.push(newRequest);
   localStorage.setItem('leaveRequests', JSON.stringify(leaveRequestsData));
+  syncEmployeeBalances();
   return newRequest;
 };
 
@@ -605,6 +677,7 @@ export const updateLeaveRequest = (id, updates) => {
   if (index !== -1) {
     leaveRequestsData[index] = { ...leaveRequestsData[index], ...updates };
     localStorage.setItem('leaveRequests', JSON.stringify(leaveRequestsData));
+    syncEmployeeBalances();
     return leaveRequestsData[index];
   }
   return null;
@@ -615,6 +688,7 @@ export const deleteLeaveRequest = (id) => {
   if (index !== -1) {
     leaveRequestsData.splice(index, 1);
     localStorage.setItem('leaveRequests', JSON.stringify(leaveRequestsData));
+    syncEmployeeBalances();
     return true;
   }
   return false;

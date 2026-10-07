@@ -24,7 +24,8 @@ import {
   addLeaveRequest,
   deleteLeaveRequest,
   updateLeaveRequest,
-  leaveStatuses
+  leaveStatuses,
+  validateAndApplyRules
 } from '../data/mockData';
 import {
   format,
@@ -525,6 +526,12 @@ const DragDropCalendar = () => {
         status: leaveStatuses.PLANNED
       };
 
+      const valDrop = validateAndApplyRules(newLeave, getLeaveRequests(), targetTech);
+      if (!valDrop.isValid) {
+        alert(valDrop.error);
+        return;
+      }
+
       addLeaveRequest(newLeave);
       setRefreshKey(prev => prev + 1);
     } else if (draggedType === 'request') {
@@ -586,6 +593,12 @@ const DragDropCalendar = () => {
       reason: newLeaveForm.reason || 'Yıllık izin talebi',
       status: newLeaveForm.status
     };
+
+    const valSubmit = validateAndApplyRules(request, getLeaveRequests(), tech);
+    if (!valSubmit.isValid) {
+      alert(valSubmit.error);
+      return;
+    }
 
     addLeaveRequest(request);
     setShowNewModal(false);

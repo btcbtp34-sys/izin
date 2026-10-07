@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { 
   getEmployees, getLeaveRequests, updateLeaveRequest, 
-  deleteLeaveRequest, leaveStatuses, COLLAR_TYPES, departments 
+  deleteLeaveRequest, leaveStatuses, COLLAR_TYPES, departments,
+  validateAndApplyRules
 } from '../data/mockData';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -186,6 +187,24 @@ const Approvals = ({ currentUser, onSwitchUser }) => {
   // Formen / Çalışan: Geri gönderilen talebi revize ederek tekrar onaya sun
   const handleConfirmResubmit = ({ startDate, endDate, duration, revisionNote }) => {
     if (!requestToResubmit) return;
+
+    // Şirket iş kurallarını denetle (Kural 4, 5, 6, 7 vb.)
+    const emp = employees.find(e => Number(e.id) === Number(requestToResubmit.employeeId));
+    const validation = validateAndApplyRules({
+      ...requestToResubmit,
+      startDate,
+      endDate
+    }, allRequests, emp);
+
+    if (!validation.isValid) {
+      showToast(validation.error, 'error');
+      return;
+    }
+
+    const finalStartDate = validation.adjustedStartDate || startDate;
+    const finalEndDate = validation.adjustedEndDate || endDate;
+    const finalDuration = validation.adjustedDuration !== undefined ? validation.adjustedDuration : duration;
+
     const currentWorkflow = requestToResubmit.approvalWorkflow ? [...requestToResubmit.approvalWorkflow] : [];
     
     currentWorkflow.push({
@@ -194,13 +213,13 @@ const Approvals = ({ currentUser, onSwitchUser }) => {
       user: `${currentUser?.name || 'Ali Vural'} (${currentUser?.title || (currentUser?.isForeman ? 'Formen' : 'Çalışan')})`,
       date: format(new Date(), 'dd.MM.yyyy HH:mm'),
       status: 'Bekliyor',
-      note: `Yeni Tarihler: ${format(new Date(startDate), 'dd MMM', { locale: tr })} - ${format(new Date(endDate), 'dd MMM yyyy', { locale: tr })} (${duration} Gün). ${revisionNote ? 'Revize Notu: ' + revisionNote : ''}`
+      note: `Yeni Tarihler: ${format(new Date(finalStartDate), 'dd MMM', { locale: tr })} - ${format(new Date(finalEndDate), 'dd MMM yyyy', { locale: tr })} (${finalDuration} Gün). ${revisionNote ? 'Revize Notu: ' + revisionNote : ''}`
     });
 
     const updated = updateLeaveRequest(requestToResubmit.id, { 
-      startDate,
-      endDate,
-      duration,
+      startDate: finalStartDate,
+      endDate: finalEndDate,
+      duration: finalDuration,
       status: leaveStatuses.PENDING,
       approvalWorkflow: currentWorkflow
     });
