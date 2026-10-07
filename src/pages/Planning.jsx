@@ -24,6 +24,7 @@ import {
 import {
   RuleNoticeModal, RuleDirectoryModal, CustomConfirmModal
 } from '../components/RuleModals';
+import { YearlyLeaveOverviewModal } from '../components/YearlyLeaveOverviewModal';
 import './Planning.css';
 
 /**
@@ -141,6 +142,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   const [rulePopup, setRulePopup] = useState(null);
   const [showRulesDirectory, setShowRulesDirectory] = useState(false);
   const [customConfirmModal, setCustomConfirmModal] = useState(null);
+  const [showYearOverviewModal, setShowYearOverviewModal] = useState(false);
 
   // Sürükle - Bırak (Drag & Drop) durumu
   const [draggedLeave, setDraggedLeave] = useState(null);
@@ -864,9 +866,18 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
           <button className="nav-arrow-btn" onClick={handlePrevMonth} title="Önceki Ay">
             <ChevronLeft size={20} />
           </button>
-          <span className="active-month-text">
-            {format(currentDate, 'MMMM yyyy', { locale: tr })}
-          </span>
+          <button 
+            type="button"
+            className="btn-month-overview-trigger"
+            onClick={() => setShowYearOverviewModal(true)}
+            title="12 Aylık Yıllık İzin Dağılımını Görüntüle ve Ay Seç"
+          >
+            <Calendar size={16} className="trigger-cal-icon" />
+            <span className="active-month-text">
+              {format(currentDate, 'MMMM yyyy', { locale: tr })}
+            </span>
+            <ChevronDown size={14} className="trigger-chevron-icon" />
+          </button>
           <button className="nav-arrow-btn" onClick={handleNextMonth} title="Sonraki Ay">
             <ChevronRight size={20} />
           </button>
@@ -1496,6 +1507,27 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
         confirmText={customConfirmModal?.confirmText}
         cancelText={customConfirmModal?.cancelText}
         confirmStyle={customConfirmModal?.confirmStyle}
+      />
+
+      {/* 10. 12 AYLIK YILLIK İZİN DAĞILIM VE AY SEÇİM MODALI (KULLANICI TALEBİ) */}
+      <YearlyLeaveOverviewModal
+        isOpen={showYearOverviewModal}
+        onClose={() => setShowYearOverviewModal(false)}
+        currentDate={currentDate}
+        selectedYear={selectedYear}
+        onYearChange={handleYearChange}
+        onSelectMonth={(monthIndex, year) => {
+          const newDate = new Date(parseInt(year), monthIndex, 1);
+          if (selectedYear !== year.toString()) {
+            handleYearChange(year.toString());
+          }
+          setCurrentDate(newDate);
+          showToast(`${format(newDate, 'MMMM yyyy', { locale: tr })} planlama takvimine geçildi!`);
+        }}
+        allRequests={allRequests}
+        employees={employees}
+        currentUser={currentUser}
+        selectedDepartment={selectedDepartment}
       />
 
     </div>
