@@ -897,8 +897,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
               <th className="sticky-col col-emp" title="Çalışan">Çalışan</th>
               <th className="sticky-col col-transferred" title="Önceki Yıldan Devreden İzin Hakkı">Devreden</th>
               <th className="sticky-col col-earned" title="Mevcut Yıl Hak Edilen / Kazanılan İzin Hakkı">Kazanılan</th>
-              <th className="sticky-col col-remaining" title="Kalan Toplam İzin Bakiyesi">Toplam Kalan</th>
               <th className="sticky-col col-planned" title="Planlanan İzin Gün Sayısı">Planlanan</th>
+              <th className="sticky-col col-remaining" title="Kalan Toplam İzin Bakiyesi">Toplam Kalan</th>
 
               {monthDays.map((day) => {
                 const dayNum = format(day, 'dd');
@@ -959,12 +959,12 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                       <strong className="text-emerald-bold">{earnedDays}</strong>
                     </td>
 
-                    <td className="sticky-col col-remaining remaining-cell" title="Toplam Kalan İzin">
-                      <strong className="text-green-bold">{remainingDaysCount}</strong>
-                    </td>
-
                     <td className="sticky-col col-planned planned-cell" title="Planlanan İzin">
                       <strong className="text-amber-bold">{plannedDaysCount}</strong>
+                    </td>
+
+                    <td className="sticky-col col-remaining remaining-cell" title="Toplam Kalan İzin">
+                      <strong className="text-green-bold">{remainingDaysCount}</strong>
                     </td>
 
                     {/* Gün Hücreleri ve Gantt Barları (Pazar günleri hariç) */}
