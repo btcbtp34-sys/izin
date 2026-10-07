@@ -287,8 +287,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   const liveValidation = useMemo(() => {
     if (!formData.employeeId || !formData.startDate || !formData.endDate) return null;
     const emp = employees.find(e => e.id === parseInt(formData.employeeId));
-    return validateAndApplyRules(formData, getLeaveRequests(), emp);
-  }, [formData.employeeId, formData.startDate, formData.endDate, employees, refreshKey]);
+    return validateAndApplyRules({ ...formData, id: editingRequest?.id }, getLeaveRequests(), emp);
+  }, [formData.employeeId, formData.startDate, formData.endDate, employees, refreshKey, editingRequest]);
 
   // İzin Formu Kaydet (Kuralları Uygula)
   const handleSubmit = (e) => {
@@ -302,7 +302,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     if (!employee) return;
 
     // KURALLARI DENETLE VE UYGULA (Kural 4, 5, 6, 7 vb.)
-    const validation = validateAndApplyRules(formData, getLeaveRequests(), employee);
+    const validation = validateAndApplyRules({ ...formData, id: editingRequest?.id }, getLeaveRequests(), employee);
     if (!validation.isValid) {
       // Chrome alert YERİNE özel şık Kural Pop-up ekranı
       setRulePopup({

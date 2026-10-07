@@ -504,8 +504,18 @@ export const getEmployeeShortLeavesCount = (employeeId, excludeRequestId = null,
  * Kural 10: Departmana Geri Gönderme - Yönetici reddettiğinde tekrar düzenlenip onaya sunulabilir.
  */
 export const validateAndApplyRules = (requestData, allRequests, employee) => {
-  let startDate = new Date(requestData.startDate);
-  let endDate = new Date(requestData.endDate);
+  // 'yyyy-MM-dd' metnini yerel saat dilimine göre güvenli şekilde Date'e çevir (UTC kaymasını önler)
+  const toLocalDate = (val) => {
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      const [y, m, d] = val.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const dt = new Date(val);
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  };
+
+  let startDate = toLocalDate(requestData.startDate);
+  let endDate = toLocalDate(requestData.endDate);
   const notices = [];
 
   const reqEmpId = Number(requestData.employeeId);
@@ -515,6 +525,8 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
 
   // Gün kontrolü: 0 = Pazar, 1 = Pazartesi, 2 = Salı, 3 = Çarşamba, 4 = Perşembe, 5 = Cuma, 6 = Cumartesi
   const originalEndDayOfWeek = getDay(endDate);
+  // İzin aralığı Cumartesi'den önceki bir günden (Cuma veya daha önce) başlıyorsa Cumartesi zaten Cuma'nın devamıdır
+  const saturdayIsFridayContinuation = originalEndDayOfWeek === 6 && startDate < endDate;
 
   // 1. KURAL 5: Cuma İzni Kontrolü
   // Cuma günü izin planlandığında Cumartesi günü de otomatik olarak plana eklenir.
@@ -524,7 +536,8 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
   } 
   // 2. KURAL 6: Cumartesi İzni Kontrolü
   // Cumartesi günü izin planlandığında Pazartesi günü de otomatik olarak plana eklenir (Pazar haftalık tatildir, sayılmaz).
-  else if (originalEndDayOfWeek === 6) {
+  // Not: Cuma + Cumartesi (Kural 5 ile genişletilmiş) izinlerde tekrar Pazartesi eklenmez.
+  else if (originalEndDayOfWeek === 6 && !saturdayIsFridayContinuation) {
     endDate = addDays(endDate, 2);
     notices.push('Kural 6: Cumartesi günü izin seçildiğinde Pazartesi günü otomatik olarak plana eklendi (Pazar günleri sayılmaz).');
   }
@@ -557,8 +570,8 @@ export const validateAndApplyRules = (requestData, allRequests, employee) => {
     );
 
     for (const sixDayLeave of existingSixDayLeaves) {
-      const otherStart = new Date(sixDayLeave.startDate);
-      const otherEnd = new Date(sixDayLeave.endDate);
+      const otherStart = toLocalDate(sixDayLeave.startDate);
+      const otherEnd = toLocalDate(sixDayLeave.endDate);
 
       // İki izin aralığı arasındaki boş İŞ GÜNÜ sayısı (Pazar günleri sayılmaz)
       let workingDaysGap = 0;
