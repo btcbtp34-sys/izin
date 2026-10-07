@@ -423,6 +423,69 @@
   gap: 8px;
 }
 
+/* İzin Planlama Arama Kutusu */
+.planning-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  min-width: 220px;
+  max-width: 280px;
+  height: 42px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.planning-search-box:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.planning-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.planning-search-input {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+  width: 100%;
+  padding: 6px 28px 6px 32px;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.planning-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.planning-search-clear:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
 .custom-floating-select {
   display: flex;
   flex-direction: column;

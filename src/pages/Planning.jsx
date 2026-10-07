@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Calendar, ChevronLeft, ChevronRight, Plus, Filter,
+  Calendar, ChevronLeft, ChevronRight, Plus, Filter, Search,
   CheckCircle, XCircle, Edit, Trash2, Sparkles, Clock,
   Users, Save, Send, Maximize2, Minimize2, User,
   CheckSquare, BarChart3, Settings as SettingsIcon, X,
@@ -119,6 +119,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   // Varsayılan ay: Görseldeki gibi Temmuz 2026 (Month index: 6)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
   const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedYear, setSelectedYear] = useState('2026');
   const [isFullView, setIsFullView] = useState(false);
   
@@ -196,8 +197,18 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     if (selectedDepartment) {
       list = list.filter(e => e.department === selectedDepartment);
     }
+
+    // Arama: ad, soyad, departman veya pozisyona göre (Türkçe karakter duyarlı)
+    const q = searchTerm.trim().toLocaleLowerCase('tr-TR');
+    if (q) {
+      list = list.filter(e =>
+        `${e.firstName} ${e.lastName} ${e.department || ''} ${e.position || ''}`
+          .toLocaleLowerCase('tr-TR')
+          .includes(q)
+      );
+    }
     return list;
-  }, [employees, currentUser, selectedDepartment, refreshKey]);
+  }, [employees, currentUser, selectedDepartment, searchTerm, refreshKey]);
 
   // Seçilen ayın günleri (Pazar günleri gösterilmez: getDay === 0 hariç tutulur)
   const monthDays = useMemo(() => {
@@ -756,6 +767,27 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
 
           {/* Filtreler: Departman & Yıl */}
           <div className="dropdown-filters-group">
+            <div className="planning-search-box">
+              <Search size={16} className="planning-search-icon" />
+              <input
+                id="planning-employee-search"
+                type="text"
+                className="planning-search-input"
+                placeholder="Çalışan veya departman ara..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  className="planning-search-clear"
+                  onClick={() => setSearchTerm('')}
+                  title="Aramayı temizle"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
             <div className="custom-floating-select">
               <span className="floating-label">Departman</span>
               <select 
