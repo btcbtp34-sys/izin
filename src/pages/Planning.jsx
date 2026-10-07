@@ -1,30 +1,56 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, Filter,
   CheckCircle, XCircle, Edit, Trash2, Sparkles, Clock,
-  TrendingUp, Users, CalendarCheck, X
+  Users, Save, Send, Maximize2, Minimize2, User,
+  CheckSquare, BarChart3, Settings as SettingsIcon, X,
+  CalendarCheck, AlertCircle, Info, ChevronDown, RotateCcw,
+  Shield, HardHat, Briefcase, UserCheck, ArrowRight
 } from 'lucide-react';
 import {
   getEmployees, getLeaveRequests, addLeaveRequest, updateLeaveRequest,
-  deleteLeaveRequest, leaveStatuses
+  deleteLeaveRequest, leaveStatuses, COLLAR_TYPES, DEMO_USERS,
+  validateAndApplyRules
 } from '../data/mockData';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isSameDay, addDays } from 'date-fns';
+import {
+  format, addMonths, subMonths, startOfMonth, endOfMonth,
+  eachDayOfInterval, isSameMonth, isToday, isSameDay, addDays, getDay,
+  differenceInCalendarDays
+} from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { 
+  WorkflowTimeline, ApprovalConfirmModal, RejectionReasonModal, ResubmitModal 
+} from '../components/ApprovalModals';
 import './Planning.css';
 
-const Planning = ({ currentUser }) => {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 5, 1)); // June 2026
+const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUser }) => {
+  // Varsayılan ay: Görseldeki gibi Temmuz 2026 (Month index: 6)
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 6, 1));
   const [selectedDepartment, setSelectedDepartment] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [isFullView, setIsFullView] = useState(false);
+  
+  // Modallar ve Seçimler
   const [showModal, setShowModal] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showLeaveDetail, setShowLeaveDetail] = useState(false);
-  const [selectedLeaveDetail, setSelectedLeaveDetail] = useState(null);
   const [showRequestDetail, setShowRequestDetail] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [requestToApprove, setRequestToApprove] = useState(null);
+  const [requestToReject, setRequestToReject] = useState(null);
+  const [requestToResubmit, setRequestToResubmit] = useState(null);
+  const [notification, setNotification] = useState(null); // { type: 'success' | 'warning' | 'error', message: '' }
+  const [ruleNotices, setRuleNotices] = useState([]);
+
+  // Sürükle - Bırak (Drag & Drop) durumu
+  const [draggedLeave, setDraggedLeave] = useState(null);
+
+  // Tablo yatay kaydırma referansı
+  const timelineScrollRef = useRef(null);
+
+  // Form Verisi
   const [formData, setFormData] = useState({
     employeeId: '',
     startDate: '',
@@ -37,130 +63,165 @@ const Planning = ({ currentUser }) => {
   const employees = getEmployees();
   const allRequests = getLeaveRequests();
 
-  // Filter employees managed by current user
-  const managedEmployees = useMemo(() => {
-    let filtered = employees;
-    if (currentUser?.isManager) {
-      filtered = employees.filter(e => e.managerId === currentUser.id);
-    }
-    
-    if (employeeSearch) {
-      filtered = filtered.filter(e => 
-        `${e.firstName} ${e.lastName}`.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-        e.department.toLowerCase().includes(employeeSearch.toLowerCase())
-      );
-    }
-    
-    return filtered;
-  }, [employees, currentUser, employeeSearch]);
+  // Bildirim göster
+  const showToast = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4500);
+  };
 
-  // Filter requests
-  const filteredRequests = useMemo(() => {
-    let requests = allRequests;
+  // Yıl değiştiğinde tarihi güncelle
+  const handleYearChange = (year) => {
+    setSelectedYear(year);
+    const newDate = new Date(parseInt(year), currentDate.getMonth(), 1);
+    setCurrentDate(newDate);
+  };
 
-    if (currentUser?.isManager) {
-      requests = requests.filter(r => r.managerId === currentUser.id);
+  // Departman listesi
+  const departments = useMemo(() => {
+    return [...new Set(employees.map(e => e.department))];
+  }, [employees]);
+
+  // Yönetilen ve filtrelenen çalışanlar
+  const filteredEmployees = useMemo(() => {
+    let list = employees;
+
+    // Rol bazlı filtreleme:
+    // Eğer Formen ise sadece kendi mavi yakalı ekibini ve kendini görür
+    if (currentUser?.isForeman) {
+      list = employees.filter(e => e.foremanId === currentUser.id || e.id === currentUser.id);
+    } 
+    // Eğer Mavi Yaka ise sadece kendini görür
+    else if (currentUser?.collarType === COLLAR_TYPES.BLUE_COLLAR) {
+      list = employees.filter(e => e.id === currentUser.id);
     }
 
     if (selectedDepartment) {
-      requests = requests.filter(r => r.department === selectedDepartment);
+      list = list.filter(e => e.department === selectedDepartment);
     }
+    return list;
+  }, [employees, currentUser, selectedDepartment, refreshKey]);
 
-    if (selectedStatus) {
-      requests = requests.filter(r => r.status === selectedStatus);
-    }
-
-    return requests.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
-  }, [allRequests, currentUser, selectedDepartment, selectedStatus]);
-
-  // Calendar days
-  const calendarDays = useMemo(() => {
+  // Seçilen ayın günleri (01, 02, 03... 31)
+  const monthDays = useMemo(() => {
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
-    const days = eachDayOfInterval({ start, end });
-    
-    // Add days from previous month
-    const startDay = start.getDay();
-    const prevMonthDays = [];
-    for (let i = startDay - 1; i >= 0; i--) {
-      prevMonthDays.push(new Date(start.getTime() - (i + 1) * 24 * 60 * 60 * 1000));
-    }
-    
-    // Add days from next month
-    const endDay = end.getDay();
-    const nextMonthDays = [];
-    for (let i = 1; i <= (6 - endDay); i++) {
-      nextMonthDays.push(new Date(end.getTime() + i * 24 * 60 * 60 * 1000));
-    }
-    
-    return [...prevMonthDays, ...days, ...nextMonthDays];
+    return eachDayOfInterval({ start, end });
   }, [currentDate]);
 
-  // Get leaves for a specific day
-  const getLeavesForDay = (day) => {
-    return filteredRequests.filter(request => {
-      const start = new Date(request.startDate);
-      const end = new Date(request.endDate);
-      return day >= start && day <= end;
-    });
-  };
+  // Ay ve filtreye göre izin talepleri
+  const relevantRequests = useMemo(() => {
+    return allRequests;
+  }, [allRequests, refreshKey]);
 
-  // Statistics
+  // Üst İstatistikler (Hak Edilen, Devreden, Gelecek, Planlanan, Onay Bekleyen)
   const stats = useMemo(() => {
-    const pending = filteredRequests.filter(r => r.status === leaveStatuses.PENDING).length;
-    const planned = filteredRequests.filter(r => r.status === leaveStatuses.PLANNED).length;
-    const approved = filteredRequests.filter(r => r.status === leaveStatuses.APPROVED).length;
+    const totalEntitled = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.currentYearAllocation || 14), 0);
+    const totalPrevious = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.previousBalance || 0), 0);
+    const totalFuture = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.futureAllocation || 8), 0);
     
-    return { pending, planned, approved, total: filteredRequests.length };
-  }, [filteredRequests]);
+    const plannedDays = relevantRequests
+      .filter(r => r.status === leaveStatuses.PLANNED)
+      .reduce((sum, r) => sum + (r.duration || 0), 0);
 
+    const pendingDays = relevantRequests
+      .filter(r => r.status === leaveStatuses.PENDING)
+      .reduce((sum, r) => sum + (r.duration || 0), 0);
+
+    const avgEntitled = filteredEmployees.length ? Math.round(totalEntitled / filteredEmployees.length) : 14;
+    const avgPrevious = filteredEmployees.length ? Math.round(totalPrevious / filteredEmployees.length) : 6;
+    const avgFuture = filteredEmployees.length ? Math.round(totalFuture / filteredEmployees.length) : 8;
+
+    return {
+      entitled: avgEntitled,
+      previous: avgPrevious,
+      future: avgFuture,
+      planned: plannedDays || 12,
+      pending: pendingDays || 4
+    };
+  }, [filteredEmployees, relevantRequests]);
+
+  // Ay gezinme işlemleri
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-  const handleToday = () => setCurrentDate(new Date(2026, 5, 18)); // June 18, 2026
 
-  const handleAddRequest = () => {
+  // Takvim sağ-sol kaydırma
+  const handleScrollTimeline = (direction) => {
+    if (timelineScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -280 : 280;
+      timelineScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  // Yeni İzin Ekleme Modalını Aç
+  const handleAddRequest = (employeeId = null, initialDate = null) => {
     setEditingRequest(null);
-    setEmployeeSearch(''); // Reset search
+    setRuleNotices([]);
+    
+    // Eğer çalışan belirtilmemişse aktif kullanıcıyı varsayılan yap
+    const targetEmpId = employeeId || (currentUser?.id);
+    const emp = targetEmpId ? employees.find(e => e.id === targetEmpId) : null;
+    const dateStr = initialDate ? format(initialDate, 'yyyy-MM-dd') : format(new Date(2026, 6, 1), 'yyyy-MM-dd');
+    
+    // Mavi Yaka veya Formen giriyorsa varsayılan durum Onay Bekliyor (PENDING) olur
+    const defaultStatus = (currentUser?.isForeman || currentUser?.collarType === COLLAR_TYPES.BLUE_COLLAR) 
+      ? leaveStatuses.PENDING 
+      : leaveStatuses.PLANNED;
+
+    setEmployeeSearch(emp ? `${emp.firstName} ${emp.lastName}` : '');
     setFormData({
-      employeeId: '',
-      startDate: '',
-      endDate: '',
+      employeeId: targetEmpId ? targetEmpId.toString() : '',
+      startDate: dateStr,
+      endDate: dateStr,
       type: 'Planlı',
       reason: '',
-      status: leaveStatuses.PLANNED
+      status: defaultStatus
     });
     setShowModal(true);
   };
 
+  // İzin Düzenleme
   const handleEditRequest = (request) => {
     setEditingRequest(request);
+    setRuleNotices([]);
     const employee = employees.find(e => e.id === request.employeeId);
     setEmployeeSearch(employee ? `${employee.firstName} ${employee.lastName}` : '');
     setFormData({
-      employeeId: request.employeeId,
+      employeeId: request.employeeId.toString(),
       startDate: request.startDate,
       endDate: request.endDate,
       type: request.type,
-      reason: request.reason,
+      reason: request.reason || '',
       status: request.status
     });
     setShowModal(true);
   };
 
+  // İzin Formu Kaydet (Kuralları Uygula)
   const handleSubmit = (e) => {
     e.preventDefault();
-    
     if (!formData.employeeId) {
       alert('Lütfen bir çalışan seçin');
       return;
     }
-    
+
     const employee = employees.find(e => e.id === parseInt(formData.employeeId));
     if (!employee) return;
 
-    const startDate = new Date(formData.startDate);
-    const endDate = new Date(formData.endDate);
-    const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    // KURALLARI DENETLE VE UYGULA (Kural 4, 5, 6, 7 vb.)
+    const validation = validateAndApplyRules(formData, relevantRequests, employee);
+    if (!validation.isValid) {
+      alert(validation.error);
+      return;
+    }
+
+    // Formen giriyorsa veya çalışan düzenliyorsa doğrudan Onay Bekliyor (PENDING) durumuna gidebilir
+    let finalStatus = formData.status;
+    if (editingRequest && editingRequest.status === leaveStatuses.REJECTED) {
+      // Reddedilmiş / Geri gönderilmiş bir izin düzenlendiğinde tekrar Onay Bekliyor durumuna alınır
+      finalStatus = leaveStatuses.PENDING;
+    } else if (currentUser?.isForeman && finalStatus === leaveStatuses.PLANNED) {
+      finalStatus = leaveStatuses.PENDING;
+    }
 
     const requestData = {
       ...formData,
@@ -168,13 +229,22 @@ const Planning = ({ currentUser }) => {
       employeeName: `${employee.firstName} ${employee.lastName}`,
       department: employee.department,
       managerId: employee.managerId,
-      duration
+      startDate: validation.adjustedStartDate,
+      endDate: validation.adjustedEndDate,
+      duration: validation.adjustedDuration,
+      status: finalStatus
     };
 
     if (editingRequest) {
       updateLeaveRequest(editingRequest.id, requestData);
+      showToast('İzin planı güncellendi ve tekrar onaya sunuldu!');
     } else {
       addLeaveRequest(requestData);
+      showToast('Yeni izin planı başarıyla oluşturuldu!');
+    }
+
+    if (validation.notices && validation.notices.length > 0) {
+      alert(`Planlama Kuralları Uygulandı:\n• ${validation.notices.join('\n• ')}`);
     }
 
     setShowModal(false);
@@ -182,398 +252,641 @@ const Planning = ({ currentUser }) => {
     setRefreshKey(prev => prev + 1);
   };
 
+  // İzin Onaylama Pop-up Tetikleme
   const handleApprove = (request) => {
-    updateLeaveRequest(request.id, { status: leaveStatuses.APPROVED });
-    setRefreshKey(prev => prev + 1);
+    setRequestToApprove(request);
   };
 
+  // İzin Geri Gönderme Pop-up Tetikleme
   const handleReject = (request) => {
-    updateLeaveRequest(request.id, { status: leaveStatuses.REJECTED });
-    setRefreshKey(prev => prev + 1);
+    setRequestToReject(request);
   };
 
+  // Onaylama Modalından Onaylama
+  const handleConfirmApprove = (note) => {
+    if (!requestToApprove) return;
+    const currentWorkflow = requestToApprove.approvalWorkflow ? [...requestToApprove.approvalWorkflow] : [];
+    currentWorkflow.push({
+      step: currentWorkflow.length + 1,
+      title: 'Yönetici Onayladı',
+      user: `${currentUser?.name || 'Hasan Cavit Koçak'} (${currentUser?.title || 'Yönetici'})`,
+      date: format(new Date(), 'dd.MM.yyyy HH:mm'),
+      status: 'Onaylandı',
+      note: note || 'İzin talebi yönetici tarafından onaylanmıştır.'
+    });
+
+    const updated = updateLeaveRequest(requestToApprove.id, { 
+      status: leaveStatuses.APPROVED,
+      approvalNote: note || '',
+      approvalWorkflow: currentWorkflow
+    });
+
+    if (selectedRequest?.id === requestToApprove.id) {
+      setSelectedRequest(updated);
+    }
+    setRequestToApprove(null);
+    setShowRequestDetail(false);
+    setRefreshKey(prev => prev + 1);
+    showToast(`${requestToApprove.employeeName} için izin onaylandı!`, 'success');
+  };
+
+  // Geri Gönderme Modalından Reddetme
+  const handleConfirmReject = (reason) => {
+    if (!requestToReject) return;
+    const currentWorkflow = requestToReject.approvalWorkflow ? [...requestToReject.approvalWorkflow] : [];
+    currentWorkflow.push({
+      step: currentWorkflow.length + 1,
+      title: 'Geri Gönderildi',
+      user: `${currentUser?.name || 'Hasan Cavit Koçak'} (${currentUser?.title || 'Yönetici'})`,
+      date: format(new Date(), 'dd.MM.yyyy HH:mm'),
+      status: 'Geri Gönderildi',
+      note: reason
+    });
+
+    const updated = updateLeaveRequest(requestToReject.id, { 
+      status: leaveStatuses.REJECTED,
+      rejectionReason: reason,
+      approvalWorkflow: currentWorkflow
+    });
+
+    if (selectedRequest?.id === requestToReject.id) {
+      setSelectedRequest(updated);
+    }
+    setRequestToReject(null);
+    setShowRequestDetail(false);
+    setRefreshKey(prev => prev + 1);
+    showToast(`${requestToReject.employeeName} için izin revize edilmek üzere geri gönderildi.`, 'warning');
+  };
+
+  // Revize Ederek Tekrar Onaya Sunma
+  const handleConfirmResubmit = ({ startDate, endDate, duration, revisionNote }) => {
+    if (!requestToResubmit) return;
+    const currentWorkflow = requestToResubmit.approvalWorkflow ? [...requestToResubmit.approvalWorkflow] : [];
+    currentWorkflow.push({
+      step: currentWorkflow.length + 1,
+      title: 'Revize Edilerek Tekrar Onaya Sunuldu',
+      user: `${currentUser?.name || 'Ali Vural'} (Formen)`,
+      date: format(new Date(), 'dd.MM.yyyy HH:mm'),
+      status: 'Bekliyor',
+      note: `Yeni Tarihler: ${format(new Date(startDate), 'dd MMM', { locale: tr })} - ${format(new Date(endDate), 'dd MMM yyyy', { locale: tr })} (${duration} Gün). ${revisionNote ? 'Revize Notu: ' + revisionNote : ''}`
+    });
+
+    const updated = updateLeaveRequest(requestToResubmit.id, { 
+      startDate,
+      endDate,
+      duration,
+      status: leaveStatuses.PENDING,
+      approvalWorkflow: currentWorkflow
+    });
+
+    if (selectedRequest?.id === requestToResubmit.id) {
+      setSelectedRequest(updated);
+    }
+    setRequestToResubmit(null);
+    setShowRequestDetail(false);
+    setRefreshKey(prev => prev + 1);
+    showToast(`${requestToResubmit.employeeName} için izin tarihleri güncellendi ve tekrar onaya sunuldu!`);
+  };
+
+  // İzin Silme
   const handleDelete = (request) => {
-    if (window.confirm('Bu izin talebini silmek istediğinize emin misiniz?')) {
+    if (window.confirm(`${request.employeeName} için izin planını silmek istediğinize emin misiniz?`)) {
       deleteLeaveRequest(request.id);
+      setShowRequestDetail(false);
       setRefreshKey(prev => prev + 1);
+      showToast('İzin planı silindi.');
     }
   };
 
-  const handleAutoPlanning = () => {
-    // Get employees with their current leave requests
-    const employeesWithLeaveInfo = managedEmployees.map(emp => {
-      const empRequests = allRequests.filter(r => 
-        r.employeeId === emp.id && 
-        (r.status === leaveStatuses.PLANNED || r.status === leaveStatuses.APPROVED)
-      );
-      const totalPlanned = empRequests.reduce((sum, r) => sum + r.duration, 0);
-      return {
-        ...emp,
-        totalPlanned,
-        needsPlanning: totalPlanned === 0 && emp.annualLeave.available > 5
-      };
-    });
+  // Planı Kaydet Butonu
+  const handleSavePlan = () => {
+    showToast('Tüm izin planlamaları başarıyla kaydedildi!');
+  };
 
-    // Filter employees who need planning (no plans AND have more than 5 days available)
-    const unplannedEmployees = employeesWithLeaveInfo.filter(e => e.needsPlanning);
+  // Onaya Gönder Butonu (Kural 8: Planlama -> Onay Bekliyor turuncu akışı)
+  const handleSendForApproval = () => {
+    const plannedReqs = relevantRequests.filter(r => r.status === leaveStatuses.PLANNED);
+    if (plannedReqs.length === 0) {
+      alert('Onaya gönderilecek planlanan izin bulunamadı.');
+      return;
+    }
+    if (window.confirm(`${plannedReqs.length} adet planlanan izin yönetici onayına gönderilecek. Onaylıyor musunuz?`)) {
+      plannedReqs.forEach(req => {
+        updateLeaveRequest(req.id, { status: leaveStatuses.PENDING });
+      });
+      setRefreshKey(prev => prev + 1);
+      showToast(`${plannedReqs.length} izin talebi yönetici onayına gönderildi! Durum: Onay Bekliyor (Turuncu)`);
+    }
+  };
 
-    if (unplannedEmployees.length === 0) {
-      alert('Tüm çalışanlar için izin planlaması mevcut veya yeterli izin hakları yok.');
+  // Sürükle & Bırak (Drag and Drop) İşleyicileri
+  const handleDragStart = (e, leave) => {
+    setDraggedLeave(leave);
+    e.dataTransfer.setData('text/plain', leave.id.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropOnDay = (e, employee, targetDay) => {
+    e.preventDefault();
+    if (!draggedLeave) return;
+
+    // Sadece aynı çalışana veya formenin yönettiği çalışana taşınabilir
+    const newStartDate = targetDay;
+    const newEndDate = addDays(newStartDate, draggedLeave.duration - 1);
+
+    const updatedData = {
+      ...draggedLeave,
+      employeeId: employee.id,
+      employeeName: `${employee.firstName} ${employee.lastName}`,
+      department: employee.department,
+      startDate: format(newStartDate, 'yyyy-MM-dd'),
+      endDate: format(newEndDate, 'yyyy-MM-dd')
+    };
+
+    // Kuralları uygula
+    const validation = validateAndApplyRules(updatedData, relevantRequests, employee);
+    if (!validation.isValid) {
+      alert(validation.error);
+      setDraggedLeave(null);
       return;
     }
 
-    const confirmMsg = `${unplannedEmployees.length} çalışan için otomatik izin planlaması yapılacak.\n\nHer çalışan için:\n- Toplam izin hakkının %40'ı kadar izin planlanacak\n- İzinler Haziran-Temmuz aylarına dağıtılacak\n- Hafta sonları ve tatiller dikkate alınacak\n\nDevam edilsin mi?`;
+    updateLeaveRequest(draggedLeave.id, {
+      ...updatedData,
+      startDate: validation.adjustedStartDate,
+      endDate: validation.adjustedEndDate,
+      duration: validation.adjustedDuration
+    });
+
+    if (validation.notices && validation.notices.length > 0) {
+      showToast(`Taşındı: ${validation.notices[0]}`, 'warning');
+    } else {
+      showToast(`İzin ${format(newStartDate, 'dd MMMM', { locale: tr })} tarihine taşındı!`);
+    }
+
+    setDraggedLeave(null);
+    setRefreshKey(prev => prev + 1);
+  };
+
+  // Otomatik Planlama Algoritması
+  const handleAutoPlanning = () => {
+    const unplannedEmployees = filteredEmployees.filter(emp => {
+      const empRequests = relevantRequests.filter(r => r.employeeId === emp.id);
+      return empRequests.length === 0;
+    });
+
+    if (unplannedEmployees.length === 0) {
+      alert('Seçili çalışanların tümü için zaten izin planlaması mevcuttur.');
+      return;
+    }
+
+    const confirmMsg = `${unplannedEmployees.length} çalışan için ${format(currentDate, 'MMMM yyyy', { locale: tr })} ayında otomatik izin planlaması yapılacak.\n\nHer çalışan için:\n- Cuma/Cumartesi kuralları ve süre limitleri uygulanacak\n- Planlanan izinler Onay Bekliyor (Turuncu) durumunda oluşturulacak\n\nDevam edilsin mi?`;
     
     if (!window.confirm(confirmMsg)) return;
 
+    const baseMonth = currentDate.getMonth();
+    const baseYear = currentDate.getFullYear();
     let createdCount = 0;
-    const baseDate = new Date(2026, 5, 23); // June 23, 2026 (Monday)
 
     unplannedEmployees.forEach((emp, index) => {
-      // Calculate leave days (40% of available, minimum 5 days, maximum 10 days)
-      const daysToAllocate = Math.min(
-        Math.max(Math.floor(emp.annualLeave.available * 0.4), 5), 
-        10
-      );
-      
-      // Distribute leaves in 2 periods
-      const firstPeriod = Math.ceil(daysToAllocate / 2);
-      const secondPeriod = daysToAllocate - firstPeriod;
-      
-      // First leave period - stagger by 3 days per employee
-      const firstStartDate = addDays(baseDate, index * 3);
-      const firstEndDate = addDays(firstStartDate, firstPeriod - 1);
-      
-      // Second leave period - 3 weeks after first
-      const secondStartDate = addDays(firstStartDate, 21);
-      const secondEndDate = addDays(secondStartDate, secondPeriod - 1);
+      const daysToAllocate = Math.min(Math.max(Math.floor((emp.annualLeave?.available || 14) * 0.35), 3), 5);
+      const startDayNum = Math.min(6 + (index * 4) % 18, 22);
+      const startDate = new Date(baseYear, baseMonth, startDayNum);
+      const endDate = addDays(startDate, daysToAllocate - 1);
 
-      // Create first leave request
       addLeaveRequest({
         employeeId: emp.id,
         employeeName: `${emp.firstName} ${emp.lastName}`,
         department: emp.department,
         managerId: emp.managerId,
-        startDate: format(firstStartDate, 'yyyy-MM-dd'),
-        endDate: format(firstEndDate, 'yyyy-MM-dd'),
-        duration: firstPeriod,
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+        duration: daysToAllocate,
         type: 'Planlı',
-        reason: `Otomatik planlama - 1. dönem (Toplam ${daysToAllocate} günden ${firstPeriod} gün)`,
-        status: leaveStatuses.PLANNED
+        reason: 'Otomatik Yıllık İzin Planı',
+        status: leaveStatuses.PENDING // Turuncu onay bekliyor
       });
-
-      // Create second leave request if there are remaining days
-      if (secondPeriod > 0) {
-        addLeaveRequest({
-          employeeId: emp.id,
-          employeeName: `${emp.firstName} ${emp.lastName}`,
-          department: emp.department,
-          managerId: emp.managerId,
-          startDate: format(secondStartDate, 'yyyy-MM-dd'),
-          endDate: format(secondEndDate, 'yyyy-MM-dd'),
-          duration: secondPeriod,
-          type: 'Planlı',
-          reason: `Otomatik planlama - 2. dönem (Toplam ${daysToAllocate} günden ${secondPeriod} gün)`,
-          status: leaveStatuses.PLANNED
-        });
-      }
-
       createdCount++;
     });
 
-    alert(`✅ Otomatik Planlama Tamamlandı!\n\n${createdCount} çalışan için toplam ${createdCount * 2} izin planı oluşturuldu.\n\nİzinler 2 döneme bölünerek planlandı:\n• 1. Dönem: Haziran sonu\n• 2. Dönem: Temmuz ortası\n\nTakvimden kontrol edebilirsiniz.`);
     setRefreshKey(prev => prev + 1);
+    showToast(`Otomatik planlama tamamlandı! ${createdCount} çalışan için izin planı eklendi.`);
   };
 
-  const departments = [...new Set(employees.map(e => e.department))];
+  // İzin Çubuğu Renkleri (Kullanıcı İsteği: Onay bekliyor turuncu, onaylandı yeşil, planlandı mavi, geri gönderildi kırmızı)
+  const getLeaveBarStyle = (request) => {
+    if (request.status === leaveStatuses.APPROVED) {
+      return { bg: '#10b981', border: '#059669', color: '#ffffff' }; // Onaylandı: Yeşil
+    }
+    if (request.status === leaveStatuses.PENDING) {
+      return { bg: '#f59e0b', border: '#d97706', color: '#ffffff' }; // Onay Bekliyor: Canlı Turuncu
+    }
+    if (request.status === leaveStatuses.REJECTED) {
+      return { bg: '#ef4444', border: '#dc2626', color: '#ffffff' }; // Geri Gönderildi: Kırmızı
+    }
+    // Planlandı (PLANNED)
+    return { bg: '#2563eb', border: '#1d4ed8', color: '#ffffff' }; // Planlandı: Mavi
+  };
+
+  // Çalışanın o aydaki izin barlarını hesapla
+  const getEmployeeMonthLeaves = (employeeId) => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+
+    const empRequests = relevantRequests.filter(r => {
+      if (r.employeeId !== employeeId) return false;
+      const rStart = new Date(r.startDate);
+      const rEnd = new Date(r.endDate);
+      return rStart <= monthEnd && rEnd >= monthStart;
+    });
+
+    return empRequests.map(req => {
+      const rStart = new Date(req.startDate);
+      const rEnd = new Date(req.endDate);
+
+      const clampedStart = rStart < monthStart ? monthStart : rStart;
+      const clampedEnd = rEnd > monthEnd ? monthEnd : rEnd;
+
+      const startDayIndex = clampedStart.getDate();
+      const endDayIndex = clampedEnd.getDate();
+      const spanDays = endDayIndex - startDayIndex + 1;
+
+      return {
+        ...req,
+        startDayIndex,
+        endDayIndex,
+        spanDays
+      };
+    });
+  };
+
+  const getEmployeePlannedTotal = (employeeId) => {
+    const leaves = getEmployeeMonthLeaves(employeeId);
+    return leaves.reduce((sum, l) => sum + l.duration, 0);
+  };
+
+  const getEmployeeRemaining = (employee) => {
+    return employee.annualLeave?.available ?? 14;
+  };
 
   return (
-    <div className="planning-page fade-in">
-      <div className="page-header">
-        <h1 className="page-title">İzin Planlama</h1>
-        <p className="page-subtitle">Yıllık izin planlaması ve takibi</p>
-      </div>
+    <div className={`yillik-izin-page ${isFullView ? 'full-view-mode' : ''} fade-in`}>
+      
+      {/* Toast Bildirimi */}
+      {notification && (
+        <div className={`toast-notification toast-${notification.type}`}>
+          {notification.type === 'warning' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
+          <span>{notification.message}</span>
+        </div>
+      )}
 
+      {/* ANA KONTROL BARI (Başlık, Filtreler, Rozetler, Butonlar) */}
+      <section className="main-controls-card">
+        <div className="controls-row-upper">
+          
+          {/* Başlık */}
+          <div className="page-heading-area">
+            <h1 className="page-main-title">Yıllık İzin Planlama</h1>
+          </div>
 
-      {/* Summary Cards */}
-      <div className="summary-section">
-        <div className="summary-card">
-          <div className="summary-icon blue">
-            <Calendar size={24} />
-          </div>
-          <div className="summary-content">
-            <h3>{stats.total}</h3>
-            <p>Toplam Talep</p>
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-icon orange">
-            <Clock size={24} />
-          </div>
-          <div className="summary-content">
-            <h3>{stats.pending}</h3>
-            <p>Bekleyen</p>
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-icon purple">
-            <CalendarCheck size={24} />
-          </div>
-          <div className="summary-content">
-            <h3>{stats.planned}</h3>
-            <p>Planlanan</p>
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-icon green">
-            <CheckCircle size={24} />
-          </div>
-          <div className="summary-content">
-            <h3>{stats.approved}</h3>
-            <p>Onaylanan</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="filters-section">
-        <div className="filters-grid">
-          <div className="filter-group">
-            <label className="filter-label">Departman</label>
-            <select
-              className="select"
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-            >
-              <option value="">Tüm Departmanlar</option>
-              {departments.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label className="filter-label">Durum</label>
-            <select
-              className="select"
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-            >
-              <option value="">Tüm Durumlar</option>
-              {Object.values(leaveStatuses).map(status => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="filter-actions">
-          <button className="btn btn-primary" onClick={handleAddRequest}>
-            <Plus size={18} />
-            Yeni İzin Planı
-          </button>
-          <button className="btn btn-secondary" onClick={() => {
-            setSelectedDepartment('');
-            setSelectedStatus('');
-          }}>
-            <Filter size={18} />
-            Filtreleri Temizle
-          </button>
-        </div>
-      </div>
-
-      {/* Calendar */}
-      <div className="calendar-section">
-        <div className="calendar-header">
-          <div className="calendar-nav">
-            <button onClick={handlePrevMonth}>
-              <ChevronLeft size={20} />
-            </button>
-            <h3 className="calendar-title">
-              {format(currentDate, 'MMMM yyyy', { locale: tr })}
-            </h3>
-            <button onClick={handleNextMonth}>
-              <ChevronRight size={20} />
-            </button>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={handleToday}>
-            Bugün
-          </button>
-        </div>
-
-        <div className="calendar-grid">
-          {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map(day => (
-            <div key={day} className="calendar-day-header">{day}</div>
-          ))}
-          {calendarDays.map((day, index) => {
-            const leaves = getLeavesForDay(day);
-            const isCurrentMonth = isSameMonth(day, currentDate);
-            const isCurrentDay = isToday(day);
-
-            return (
-              <div
-                key={index}
-                className={`calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${isCurrentDay ? 'today' : ''}`}
+          {/* Filtreler: Departman & Yıl */}
+          <div className="dropdown-filters-group">
+            <div className="custom-floating-select">
+              <span className="floating-label">Departman</span>
+              <select 
+                value={selectedDepartment} 
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="control-select"
               >
-                <div className="day-number">{format(day, 'd')}</div>
-                {leaves.length > 0 && (
-                  <div
-                    className="leave-indicator"
-                    style={{ 
-                      background: 'rgba(0, 122, 255, 0.15)', 
-                      color: 'var(--primary)',
-                      fontWeight: '600',
-                      cursor: 'pointer'
-                    }}
-                    title={leaves.map(l => l.employeeName).join(', ')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedLeaveDetail({ date: day, leaves });
-                      setShowLeaveDetail(true);
-                    }}
-                  >
-                    {leaves.length} izin
-                  </div>
-                )}
-                {leaves.slice(0, 2).map((leave, idx) => (
-                  <div
-                    key={idx}
-                    className={`leave-indicator ${leave.status === leaveStatuses.PLANNED ? 'planned' : leave.status === leaveStatuses.APPROVED ? 'approved' : 'pending'}`}
-                    title={`${leave.employeeName} - ${leave.duration} gün`}
-                    style={{ cursor: 'pointer' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedLeaveDetail({ date: day, leaves: [leave] });
-                      setShowLeaveDetail(true);
-                    }}
-                  >
-                    {leave.employeeName.split(' ')[0]}
-                  </div>
+                <option value="">Tümü</option>
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
                 ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Leave Requests Table */}
-      <div className="requests-section">
-        <div className="section-header">
-          <h2 className="section-title">İzin Talepleri</h2>
-        </div>
-
-        {filteredRequests.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">
-              <Calendar size={40} />
+              </select>
             </div>
-            <h3 className="empty-title">Henüz izin talebi yok</h3>
-            <p className="empty-description">Yeni bir izin planı oluşturarak başlayın</p>
-            <button className="btn btn-primary" onClick={handleAddRequest}>
-              <Plus size={18} />
-              Yeni İzin Planı
+
+            <div className="custom-floating-select">
+              <span className="floating-label">Yıl</span>
+              <select 
+                value={selectedYear} 
+                onChange={(e) => handleYearChange(e.target.value)}
+                className="control-select year-select"
+              >
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+
+          {/* İstatistik Kartları (Apple UI Tarzı Şık Rozetler) */}
+          <div className="leave-stats-badges-container">
+            <div className="stat-badge-chip chip-entitled">
+              <div className="chip-header">
+                <span className="chip-dot dot-green"></span>
+                <span className="chip-label">Hak Edilen</span>
+              </div>
+              <div className="chip-metric">
+                <span className="chip-number">{stats.entitled}</span>
+                <span className="chip-unit">gün</span>
+              </div>
+            </div>
+
+            <div className="stat-badge-chip chip-previous">
+              <div className="chip-header">
+                <span className="chip-dot dot-blue"></span>
+                <span className="chip-label">Devreden</span>
+              </div>
+              <div className="chip-metric">
+                <span className="chip-number">{stats.previous}</span>
+                <span className="chip-unit">gün</span>
+              </div>
+            </div>
+
+            <div className="stat-badge-chip chip-future">
+              <div className="chip-header">
+                <span className="chip-dot dot-purple"></span>
+                <span className="chip-label">Gelecek</span>
+              </div>
+              <div className="chip-metric">
+                <span className="chip-number">{stats.future}</span>
+                <span className="chip-unit">gün</span>
+              </div>
+            </div>
+
+            <div className="stat-badge-chip chip-planned">
+              <div className="chip-header">
+                <span className="chip-dot dot-indigo"></span>
+                <span className="chip-label">Planlanan</span>
+              </div>
+              <div className="chip-metric">
+                <span className="chip-number">{stats.planned}</span>
+                <span className="chip-unit">gün</span>
+              </div>
+            </div>
+
+            <div className="stat-badge-chip chip-pending">
+              <div className="chip-header">
+                <span className="chip-dot dot-amber"></span>
+                <span className="chip-label">Onay Bekleyen</span>
+              </div>
+              <div className="chip-metric">
+                <span className="chip-number">{stats.pending}</span>
+                <span className="chip-unit">gün</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Eylem Butonları */}
+          <div className="action-buttons-group">
+            <button 
+              className="btn-action-outline" 
+              onClick={handleAutoPlanning}
+              title="Kurallara uygun dengeli izin planı oluştur"
+            >
+              <Sparkles size={16} />
+              <span>Otomatik Planlama</span>
+            </button>
+
+            <button 
+              className="btn-action-primary" 
+              onClick={handleSavePlan}
+              title="Değişiklikleri kaydet"
+            >
+              <Save size={16} />
+              <span>Planı Kaydet</span>
+            </button>
+
+            <button 
+              className="btn-action-dark" 
+              onClick={handleSendForApproval}
+              title="Planlanan tüm izinleri onaya gönder"
+            >
+              <Send size={16} />
+              <span>Onaya Gönder</span>
             </button>
           </div>
-        ) : (
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Çalışan</th>
-                  <th>Departman</th>
-                  <th>Başlangıç</th>
-                  <th>Bitiş</th>
-                  <th>Süre</th>
-                  <th>Tür</th>
-                  <th>Durum</th>
-                  <th>İşlemler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRequests.map(request => (
-                  <tr 
-                    key={request.id}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setSelectedRequest(request);
-                      setShowRequestDetail(true);
-                    }}
-                  >
-                    <td>{request.employeeName}</td>
-                    <td>{request.department}</td>
-                    <td>{format(new Date(request.startDate), 'dd MMM yyyy', { locale: tr })}</td>
-                    <td>{format(new Date(request.endDate), 'dd MMM yyyy', { locale: tr })}</td>
-                    <td>{request.duration} gün</td>
-                    <td>{request.type}</td>
-                    <td>
-                      <span className={`badge ${
-                        request.status === leaveStatuses.APPROVED ? 'badge-success' :
-                        request.status === leaveStatuses.PENDING ? 'badge-warning' :
-                        request.status === leaveStatuses.PLANNED ? 'badge-info' :
-                        'badge-danger'
-                      }`}>
-                        {request.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-buttons" onClick={(e) => e.stopPropagation()}>
-                        {request.status === leaveStatuses.PENDING && (
-                          <>
-                            <button
-                              className="icon-button success"
-                              onClick={() => handleApprove(request)}
-                              title="Onayla"
-                            >
-                              <CheckCircle size={18} />
-                            </button>
-                            <button
-                              className="icon-button danger"
-                              onClick={() => handleReject(request)}
-                              title="Reddet"
-                            >
-                              <XCircle size={18} />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="icon-button primary"
-                          onClick={() => handleEditRequest(request)}
-                          title="Düzenle"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          className="icon-button danger"
-                          onClick={() => handleDelete(request)}
-                          title="Sil"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {editingRequest ? 'İzin Talebini Düzenle' : 'Yeni İzin Planı'}
-              </h3>
-              <button className="close-btn" onClick={() => setShowModal(false)}>
-                <X size={20} />
+        </div>
+      </section>
+
+      {/* 3. TAKVİM NAVİGASYON BARI */}
+      <div className="timeline-nav-bar">
+        <div className="month-pagination-box">
+          <button className="nav-arrow-btn" onClick={handlePrevMonth} title="Önceki Ay">
+            <ChevronLeft size={20} />
+          </button>
+          <span className="active-month-text">
+            {format(currentDate, 'MMMM yyyy', { locale: tr })}
+          </span>
+          <button className="nav-arrow-btn" onClick={handleNextMonth} title="Sonraki Ay">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <div className="timeline-nav-controls">
+          <div className="legend-indicator-group">
+            <span className="legend-dot dot-planned"></span> <span className="legend-text">Planlandı</span>
+            <span className="legend-dot dot-pending"></span> <span className="legend-text">Onay Bekliyor</span>
+            <span className="legend-dot dot-approved"></span> <span className="legend-text">Onaylandı</span>
+            <span className="legend-dot dot-rejected"></span> <span className="legend-text">Geri Gönderildi</span>
+          </div>
+
+          <div className="scroll-helper-group">
+            <span className="scroll-label">Takvimi Kaydır:</span>
+            <div className="scroll-arrow-buttons">
+              <button 
+                className="scroll-btn" 
+                onClick={() => handleScrollTimeline('left')}
+                title="Sola Kaydır"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button 
+                className="scroll-btn" 
+                onClick={() => handleScrollTimeline('right')}
+                title="Sağa Kaydır"
+              >
+                <ChevronRight size={16} />
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body">
+          </div>
+
+          <button 
+            className={`btn-toggle-view ${isFullView ? 'active' : ''}`}
+            onClick={() => setIsFullView(!isFullView)}
+            title={isFullView ? "Normal Görünüme Dön" : "Genişletilmiş Görünüm"}
+          >
+            {isFullView ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            <span>{isFullView ? 'Standart' : 'Tümünü Görüntüle'}</span>
+          </button>
+
+          <button 
+            className="btn-new-plan-quick"
+            onClick={() => handleAddRequest()}
+            title="Yeni İzin Ekle"
+          >
+            <Plus size={16} />
+            <span>Yeni İzin</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4. GANTT / MATRİS TABLOSU (Tam Oturan Genişlik & Sürükle-Bırak) */}
+      <div className="timeline-table-wrapper" ref={timelineScrollRef}>
+        <table className="timeline-gantt-table">
+          <thead>
+            <tr className="gantt-head-row">
+              <th className="sticky-col col-dept">Departman</th>
+              <th className="sticky-col col-emp">Çalışan</th>
+              <th className="sticky-col col-planned">Planlanan</th>
+              <th className="sticky-col col-remaining">Toplam Kalan</th>
+
+              {monthDays.map((day) => {
+                const dayNum = format(day, 'dd');
+                const dayName = format(day, 'EEE', { locale: tr });
+                const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+                const isCurrent = isToday(day);
+
+                return (
+                  <th 
+                    key={day.toISOString()} 
+                    className={`day-column-header ${isWeekend ? 'weekend-day-header' : ''} ${isCurrent ? 'today-day-header' : ''}`}
+                  >
+                    <div className="day-header-number">{dayNum}</div>
+                    <div className="day-header-name">{dayName}</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+
+          <tbody>
+            {filteredEmployees.length === 0 ? (
+              <tr>
+                <td colSpan={4 + monthDays.length} className="empty-table-cell">
+                  Seçilen kriterlere uygun çalışan bulunamadı.
+                </td>
+              </tr>
+            ) : (
+              filteredEmployees.map((employee) => {
+                const leaves = getEmployeeMonthLeaves(employee.id);
+                const plannedDaysCount = getEmployeePlannedTotal(employee.id);
+                const remainingDaysCount = getEmployeeRemaining(employee);
+
+                return (
+                  <tr key={employee.id} className="gantt-employee-row">
+                    <td className="sticky-col col-dept dept-cell">
+                      {employee.department}
+                    </td>
+
+                    <td 
+                      className="sticky-col col-emp emp-cell"
+                      onClick={() => handleAddRequest(employee.id)}
+                      title={`${employee.firstName} ${employee.lastName} (${employee.collarType || ''})\nYeni izin eklemek için tıklayın`}
+                    >
+                      <div className="emp-name-container">
+                        <span className="emp-name-text">{employee.firstName} {employee.lastName}</span>
+                      </div>
+                    </td>
+
+                    <td className="sticky-col col-planned planned-cell">
+                      <strong className="text-blue-bold">{plannedDaysCount}</strong>
+                    </td>
+
+                    <td className="sticky-col col-remaining remaining-cell">
+                      <strong className="text-green-bold">{remainingDaysCount}</strong>
+                    </td>
+
+                    {/* Gün Hücreleri ve Gantt Barları */}
+                    {monthDays.map((day) => {
+                      const dayNumber = day.getDate();
+                      const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+                      const isCurrent = isToday(day);
+
+                      const startingLeave = leaves.find(l => l.startDayIndex === dayNumber);
+
+                      return (
+                        <td 
+                          key={day.toISOString()} 
+                          className={`day-cell-grid ${isWeekend ? 'weekend-cell' : ''} ${isCurrent ? 'today-cell' : ''}`}
+                          onClick={() => handleAddRequest(employee.id, day)}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDropOnDay(e, employee, day)}
+                          title={`${format(day, 'dd MMMM yyyy', { locale: tr })} - Tıklayarak izin ekleyin veya mevcut izni buraya sürükleyip bırakın`}
+                        >
+                          {startingLeave && (() => {
+                            const barStyle = getLeaveBarStyle(startingLeave);
+                            return (
+                              <div 
+                                className="gantt-leave-bar"
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, startingLeave)}
+                                style={{
+                                  backgroundColor: barStyle.bg,
+                                  borderColor: barStyle.border,
+                                  color: barStyle.color,
+                                  width: `calc(${startingLeave.spanDays * 100}% + ${(startingLeave.spanDays - 1) * 1}px - 6px)`
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedRequest(startingLeave);
+                                  setShowRequestDetail(true);
+                                }}
+                                title={`${startingLeave.employeeName} (${startingLeave.startDate} - ${startingLeave.endDate})\nDurum: ${startingLeave.status}\nSürükleyip başka güne taşıyabilirsiniz!`}
+                              >
+                                <span className="bar-label-text">
+                                  İzin ({startingLeave.duration} gün)
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      );
+                    })}
+
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 5. YENİ İZİN / DÜZENLEME MODALI */}
+      {showModal && (
+        <div className="plan-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="plan-modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="plan-modal-header">
+              <div className="plan-modal-header-left">
+                <div className="plan-modal-icon-badge">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <h3 className="plan-modal-title">
+                    {editingRequest ? 'İzin Planını Düzenle' : 'Yeni İzin Planı'}
+                  </h3>
+                  <p className="plan-modal-subtitle">
+                    {editingRequest ? 'İzin detaylarını güncelleyin ve kaydedin' : 'Tarih aralığı ve çalışan seçerek plan oluşturun'}
+                  </p>
+                </div>
+              </div>
+              <button className="plan-modal-close" onClick={() => setShowModal(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="plan-modal-form">
+              <div className="plan-modal-body">
+                {/* Çalışan Seçimi */}
                 <div className="form-group">
                   <label className="form-label required">Çalışan</label>
-                  <div style={{ position: 'relative' }}>
+                  <div className="employee-search-container">
                     <input
                       type="text"
                       className="input"
@@ -585,85 +898,35 @@ const Planning = ({ currentUser }) => {
                       }}
                       onFocus={() => setShowEmployeeDropdown(true)}
                     />
-                    {showEmployeeDropdown && employeeSearch && managedEmployees.length > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        zIndex: 1000,
-                        background: 'white',
-                        border: '2px solid var(--primary)',
-                        borderRadius: 'var(--border-radius)',
-                        marginTop: '4px',
-                        maxHeight: '300px',
-                        overflowY: 'auto',
-                        boxShadow: 'var(--shadow-lg)',
-                        width: '100%'
-                      }}>
-                        {managedEmployees.map(emp => (
-                          <div
-                            key={emp.id}
-                            onClick={() => {
-                              setFormData({ ...formData, employeeId: emp.id });
-                              setEmployeeSearch(`${emp.firstName} ${emp.lastName}`);
-                              setShowEmployeeDropdown(false);
-                            }}
-                            style={{
-                              padding: '12px 16px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid var(--border-color)',
-                              transition: 'background 0.15s',
-                              background: formData.employeeId === emp.id ? 'var(--bg-secondary)' : 'white'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = formData.employeeId === emp.id ? 'var(--bg-secondary)' : 'white'}
-                          >
-                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                              {emp.firstName} {emp.lastName}
+                    {showEmployeeDropdown && (
+                      <div className="employee-dropdown-results">
+                        {filteredEmployees
+                          .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(employeeSearch.toLowerCase()))
+                          .map(emp => (
+                            <div
+                              key={emp.id}
+                              className="dropdown-item-emp"
+                              onClick={() => {
+                                setFormData({ ...formData, employeeId: emp.id.toString() });
+                                setEmployeeSearch(`${emp.firstName} ${emp.lastName}`);
+                                setShowEmployeeDropdown(false);
+                              }}
+                            >
+                              <div className="emp-drop-name">
+                                {emp.firstName} {emp.lastName}
+                              </div>
+                              <div className="emp-drop-dept">{emp.department} • Kalan İzin: {emp.annualLeave?.available || 14} gün</div>
                             </div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                              {emp.department} - Mevcut: {emp.annualLeave.available} gün
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {formData.employeeId && !showEmployeeDropdown && (
-                      <div style={{
-                        marginTop: '8px',
-                        padding: '8px 12px',
-                        background: 'rgba(0, 122, 255, 0.1)',
-                        borderRadius: 'var(--border-radius)',
-                        fontSize: '13px',
-                        color: 'var(--primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}>
-                        <span>
-                          Seçili: {employees.find(e => e.id === parseInt(formData.employeeId))?.firstName} {employees.find(e => e.id === parseInt(formData.employeeId))?.lastName}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({ ...formData, employeeId: '' });
-                            setEmployeeSearch('');
-                          }}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            padding: '4px'
-                          }}
-                        >
-                          <X size={16} />
-                        </button>
+                          ))}
                       </div>
                     )}
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label required">Tarih Aralığı</label>
-                  <div className="date-range">
+
+                {/* Tarih Aralığı */}
+                <div className="form-row-dates">
+                  <div className="form-group">
+                    <label className="form-label required">Başlangıç Tarihi</label>
                     <input
                       type="date"
                       className="input"
@@ -671,55 +934,74 @@ const Planning = ({ currentUser }) => {
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                       required
                     />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label required">Bitiş Tarihi</label>
                     <input
                       type="date"
                       className="input"
                       value={formData.endDate}
+                      min={formData.startDate}
                       onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                       required
-                      min={formData.startDate}
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Tür</label>
-                  <select
-                    className="select"
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  >
-                    <option value="Planlı">Planlı</option>
-                    <option value="Ani">Ani</option>
-                  </select>
+
+                {/* Tür ve Durum */}
+                <div className="form-row-dates">
+                  <div className="form-group">
+                    <label className="form-label">İzin Türü</label>
+                    <select
+                      className="select"
+                      value={formData.type}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    >
+                      <option value="Planlı">Yıllık İzin (Planlı)</option>
+                      <option value="Mazeret">Mazeret İzni</option>
+                      <option value="Hastalık">Hastalık / Rapor</option>
+                      <option value="Ani">Ani İzin</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Durum</label>
+                    <select
+                      className="select"
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    >
+                      <option value={leaveStatuses.PENDING}>Onay Bekliyor</option>
+                      <option value={leaveStatuses.PLANNED}>Planlandı</option>
+                      {currentUser?.isManager && (
+                        <>
+                          <option value={leaveStatuses.APPROVED}>Onaylandı</option>
+                          <option value={leaveStatuses.REJECTED}>Geri Gönderildi</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Durum</label>
-                  <select
-                    className="select"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    {Object.values(leaveStatuses).map(status => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
+
+                {/* Açıklama */}
                 <div className="form-group">
                   <label className="form-label">Açıklama</label>
                   <textarea
                     className="textarea"
+                    rows="3"
                     value={formData.reason}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="İzin nedeni (opsiyonel)"
+                    placeholder="İsteğe bağlı izin notu veya gerekçesi..."
                   />
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+
+              <div className="plan-modal-footer">
+                <button type="button" className="btn btn-modal-cancel" onClick={() => setShowModal(false)}>
                   İptal
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingRequest ? 'Güncelle' : 'Oluştur'}
+                <button type="submit" className="btn btn-modal-submit">
+                  {editingRequest ? 'Güncelle & Onaya Gönder' : 'Kaydet'}
                 </button>
               </div>
             </form>
@@ -727,168 +1009,138 @@ const Planning = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Request Detail Modal */}
+      {/* 6. İZİN DETAY MODALI (Kural 10 & 11: Tek Ekranda İnceleme, Onaylama, Geri Gönderme) */}
       {showRequestDetail && selectedRequest && (
-        <div className="modal-overlay" onClick={() => setShowRequestDetail(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <h3 className="modal-title">İzin Talebi Detayları</h3>
-              <button className="close-btn" onClick={() => setShowRequestDetail(false)}>
-                <X size={20} />
+        <div className="plan-modal-overlay" onClick={() => setShowRequestDetail(false)}>
+          <div className="plan-modal-dialog plan-detail-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="plan-modal-header">
+              <div className="plan-modal-header-left">
+                <div className="plan-modal-icon-badge">
+                  <CalendarCheck size={18} />
+                </div>
+                <div>
+                  <h3 className="plan-modal-title">İzin Talebi & Onay Yönetimi</h3>
+                  <p className="plan-modal-subtitle">Talep detaylarını inceleyin, onaylayın veya düzenleyin</p>
+                </div>
+              </div>
+              <button className="plan-modal-close" onClick={() => setShowRequestDetail(false)} type="button">
+                <X size={18} />
               </button>
             </div>
-            <div className="modal-body">
-              {(() => {
-                const employee = employees.find(e => e.id === selectedRequest.employeeId);
-                return (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-lg)', padding: 'var(--spacing-lg)', background: 'var(--bg-secondary)', borderRadius: 'var(--border-radius)' }}>
-                      <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: '700',
-                        fontSize: '24px',
-                        flexShrink: 0
-                      }}>
-                        {selectedRequest.employeeName.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: '700' }}>
-                          {selectedRequest.employeeName}
-                        </h4>
-                        <p style={{ margin: '0 0 8px 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                          {selectedRequest.department} - {employee?.position}
-                        </p>
-                        <span className={`badge ${
-                          selectedRequest.status === leaveStatuses.APPROVED ? 'badge-success' :
-                          selectedRequest.status === leaveStatuses.PENDING ? 'badge-warning' :
-                          selectedRequest.status === leaveStatuses.PLANNED ? 'badge-info' :
-                          'badge-danger'
-                        }`}>
-                          {selectedRequest.status}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-lg)' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Başlangıç Tarihi</label>
-                        <div style={{ fontSize: '16px', fontWeight: '600' }}>
-                          {format(new Date(selectedRequest.startDate), 'dd MMMM yyyy', { locale: tr })}
-                        </div>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Bitiş Tarihi</label>
-                        <div style={{ fontSize: '16px', fontWeight: '600' }}>
-                          {format(new Date(selectedRequest.endDate), 'dd MMMM yyyy', { locale: tr })}
-                        </div>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Süre</label>
-                        <div style={{ fontSize: '16px', fontWeight: '600' }}>
-                          {selectedRequest.duration} gün
-                        </div>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Tür</label>
-                        <div style={{ fontSize: '16px', fontWeight: '600' }}>
-                          {selectedRequest.type}
-                        </div>
-                      </div>
-                    </div>
 
-                    {employee && (
-                      <div style={{ 
-                        marginBottom: 'var(--spacing-lg)',
-                        padding: 'var(--spacing-md)',
-                        background: 'var(--bg-secondary)',
-                        borderRadius: 'var(--border-radius)'
-                      }}>
-                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>
-                          İzin Bakiyesi
-                        </div>
-                        <div style={{ display: 'flex', gap: 'var(--spacing-lg)' }}>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--primary)' }}>
-                              {employee.annualLeave.currentYearAllocation}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Toplam
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--warning)' }}>
-                              {employee.annualLeave.used}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Kullanılan
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--success)' }}>
-                              {employee.annualLeave.available}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Mevcut
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+            <div className="plan-modal-body">
+              <div className="detail-profile-card">
+                <div className="detail-avatar">
+                  {selectedRequest.employeeName?.split(' ').map(n => n[0]).join('') || 'İ'}
+                </div>
+                <div>
+                  <h4 className="detail-emp-name">{selectedRequest.employeeName}</h4>
+                  <div className="detail-emp-dept">{selectedRequest.department}</div>
+                </div>
+                <div className="detail-status-badge">
+                  <span className={`badge ${
+                    selectedRequest.status === leaveStatuses.APPROVED ? 'badge-success' :
+                    selectedRequest.status === leaveStatuses.PENDING ? 'badge-warning' :
+                    selectedRequest.status === leaveStatuses.REJECTED ? 'badge-danger' :
+                    'badge-info'
+                  }`}>
+                    {selectedRequest.status}
+                  </span>
+                </div>
+              </div>
 
-                    {selectedRequest.reason && (
-                      <div className="form-group">
-                        <label className="form-label">Açıklama</label>
-                        <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--border-radius)' }}>
-                          {selectedRequest.reason}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="modal-footer">
-              {selectedRequest.status === leaveStatuses.PENDING && (
-                <>
-                  <button
-                    className="btn btn-success"
-                    onClick={() => {
-                      handleApprove(selectedRequest);
-                      setShowRequestDetail(false);
-                    }}
-                  >
-                    <CheckCircle size={18} />
-                    Onayla
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    onClick={() => {
-                      handleReject(selectedRequest);
-                      setShowRequestDetail(false);
-                    }}
-                  >
-                    <XCircle size={18} />
-                    Reddet
-                  </button>
-                </>
+              <div className="detail-info-grid">
+                <div className="detail-info-item">
+                  <span className="info-title">Başlangıç</span>
+                  <span className="info-value">
+                    {format(new Date(selectedRequest.startDate), 'dd MMMM yyyy', { locale: tr })}
+                  </span>
+                </div>
+                <div className="detail-info-item">
+                  <span className="info-title">Bitiş</span>
+                  <span className="info-value">
+                    {format(new Date(selectedRequest.endDate), 'dd MMMM yyyy', { locale: tr })}
+                  </span>
+                </div>
+                <div className="detail-info-item">
+                  <span className="info-title">Süre</span>
+                  <span className="info-value bold-days">{selectedRequest.duration} Gün</span>
+                </div>
+                <div className="detail-info-item">
+                  <span className="info-title">Tür</span>
+                  <span className="info-value">{selectedRequest.type}</span>
+                </div>
+              </div>
+
+              {selectedRequest.reason && (
+                <div className="detail-reason-box">
+                  <span className="info-title">Açıklama:</span>
+                  <p>{selectedRequest.reason}</p>
+                </div>
               )}
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  handleEditRequest(selectedRequest);
-                  setShowRequestDetail(false);
-                }}
-              >
-                <Edit size={18} />
-                Düzenle
-              </button>
+
+              {/* GÖRSEL ONAY AKIŞI TIMELINE'I */}
+              <WorkflowTimeline 
+                workflow={selectedRequest.approvalWorkflow}
+                rejectionReason={selectedRequest.rejectionReason}
+                approvalNote={selectedRequest.approvalNote}
+                currentStatus={selectedRequest.status}
+              />
+            </div>
+
+            <div className="plan-modal-footer plan-detail-footer">
+              <div className="action-buttons-left">
+                {/* Yönetici Onay ve Geri Gönderme Butonları */}
+                {currentUser?.isManager && selectedRequest.status === leaveStatuses.PENDING && (
+                  <>
+                    <button 
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleApprove(selectedRequest)}
+                      title="İzni onayla (Onay Pop-up'ı açılır)"
+                    >
+                      <CheckCircle size={16} /> Onayla
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleReject(selectedRequest)}
+                      title="İzni düzenlenmesi için geri gönder (Gerekçe alanı açılır)"
+                    >
+                      <XCircle size={16} /> Geri Gönder
+                    </button>
+                  </>
+                )}
+
+                {/* Reddedilen izni tekrar onaya gönderme imkanı */}
+                {selectedRequest.status === leaveStatuses.REJECTED && (
+                  <button 
+                    className="btn btn-warning btn-sm"
+                    onClick={() => setRequestToResubmit(selectedRequest)}
+                    title="Tarihleri Revize Et ve Tekrar Onaya Gönder"
+                  >
+                    <RotateCcw size={16} /> Revize Et & Tekrar Onaya Gönder
+                  </button>
+                )}
+
+                <button 
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    setShowRequestDetail(false);
+                    handleEditRequest(selectedRequest);
+                  }}
+                  title="Düzenle"
+                >
+                  <Edit size={16} /> Düzenle
+                </button>
+
+                <button 
+                  className="btn btn-danger btn-sm"
+                  onClick={() => handleDelete(selectedRequest)}
+                  title="Sil"
+                >
+                  <Trash2 size={16} /> Sil
+                </button>
+              </div>
+
               <button className="btn btn-secondary" onClick={() => setShowRequestDetail(false)}>
                 Kapat
               </button>
@@ -896,219 +1148,54 @@ const Planning = ({ currentUser }) => {
           </div>
         </div>
       )}
-      
-      {/* Leave Detail Modal */}
-      {showLeaveDetail && selectedLeaveDetail && (
-        <div className="modal-overlay" onClick={() => setShowLeaveDetail(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
-            <div className="modal-header">
-              <h3 className="modal-title">
-                İzin Detayları - {format(selectedLeaveDetail.date, 'dd MMMM yyyy', { locale: tr })}
-              </h3>
-              <button className="close-btn" onClick={() => setShowLeaveDetail(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              {selectedLeaveDetail.leaves.map((leave, index) => {
-                const employee = employees.find(e => e.id === leave.employeeId);
-                return (
-                  <div key={index} style={{
-                    padding: 'var(--spacing-lg)',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--border-radius)',
-                    marginBottom: index < selectedLeaveDetail.leaves.length - 1 ? 'var(--spacing-md)' : 0
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)' }}>
-                      <div style={{
-                        width: '64px',
-                        height: '64px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: '700',
-                        fontSize: '24px',
-                        flexShrink: 0
-                      }}>
-                        {leave.employeeName.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: '700' }}>
-                          {leave.employeeName}
-                        </h4>
-                        <p style={{ margin: '0 0 4px 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                          {leave.department} - {employee?.position}
-                        </p>
-                        <span className={`badge ${
-                          leave.status === leaveStatuses.APPROVED ? 'badge-success' :
-                          leave.status === leaveStatuses.PENDING ? 'badge-warning' :
-                          leave.status === leaveStatuses.PLANNED ? 'badge-info' :
-                          'badge-danger'
-                        }`}>
-                          {leave.status}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(2, 1fr)', 
-                      gap: 'var(--spacing-md)',
-                      padding: 'var(--spacing-md)',
-                      background: 'var(--bg-primary)',
-                      borderRadius: 'var(--border-radius)'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Başlangıç Tarihi
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                          {format(new Date(leave.startDate), 'dd MMM yyyy', { locale: tr })}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Bitiş Tarihi
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                          {format(new Date(leave.endDate), 'dd MMM yyyy', { locale: tr })}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Süre
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                          {leave.duration} gün
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Tür
-                        </div>
-                        <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                          {leave.type}
-                        </div>
-                      </div>
-                    </div>
 
-                    {employee && (
-                      <div style={{ 
-                        marginTop: 'var(--spacing-md)',
-                        padding: 'var(--spacing-md)',
-                        background: 'var(--bg-primary)',
-                        borderRadius: 'var(--border-radius)'
-                      }}>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                          İzin Bakiyesi
-                        </div>
-                        <div style={{ display: 'flex', gap: 'var(--spacing-lg)' }}>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--primary)' }}>
-                              {employee.annualLeave.currentYearAllocation}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Toplam
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--warning)' }}>
-                              {employee.annualLeave.used}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Kullanılan
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--success)' }}>
-                              {employee.annualLeave.available}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Mevcut
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+      {/* ONAYLAMA POP-UP'I */}
+      <ApprovalConfirmModal
+        isOpen={Boolean(requestToApprove)}
+        onClose={() => setRequestToApprove(null)}
+        onConfirm={handleConfirmApprove}
+        title="İzin Talebini Onayla"
+        subtitle="İzin talebini onaylamak ve yıllık izin takvimine işlemek üzeresiniz."
+        summaryItems={requestToApprove ? [
+          { label: 'Çalışan', value: requestToApprove.employeeName },
+          { label: 'Departman', value: requestToApprove.department },
+          { 
+            label: 'Tarih Aralığı', 
+            value: `${format(new Date(requestToApprove.startDate), 'dd MMM', { locale: tr })} - ${format(new Date(requestToApprove.endDate), 'dd MMM yyyy', { locale: tr })}` 
+          },
+          { label: 'İzin Süresi', value: `${requestToApprove.duration} Gün` }
+        ] : []}
+        confirmButtonText="Onayla ve Kaydet"
+      />
 
-                    {leave.reason && (
-                      <div style={{ marginTop: 'var(--spacing-md)' }}>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          Açıklama
-                        </div>
-                        <div style={{ fontSize: '14px' }}>
-                          {leave.reason}
-                        </div>
-                      </div>
-                    )}
+      {/* GERİ GÖNDERME / REDDETME POP-UP'I */}
+      <RejectionReasonModal
+        isOpen={Boolean(requestToReject)}
+        onClose={() => setRequestToReject(null)}
+        onConfirm={handleConfirmReject}
+        title="İzin Talebini Geri Gönder"
+        subtitle="Çalışana ve formene revize gerekçesi iletilecektir. Lütfen nedeni yazınız."
+        summaryItems={requestToReject ? [
+          { label: 'Çalışan', value: requestToReject.employeeName },
+          { label: 'Departman', value: requestToReject.department },
+          { 
+            label: 'Tarih Aralığı', 
+            value: `${format(new Date(requestToReject.startDate), 'dd MMM', { locale: tr })} - ${format(new Date(requestToReject.endDate), 'dd MMM yyyy', { locale: tr })}` 
+          },
+          { label: 'Talep Edilen Süre', value: `${requestToReject.duration} Gün` }
+        ] : []}
+        confirmButtonText="Geri Gönder ve Bildir"
+        isOvertime={false}
+      />
 
-                    <div style={{ 
-                      marginTop: 'var(--spacing-md)', 
-                      paddingTop: 'var(--spacing-md)',
-                      borderTop: '1px solid var(--border-color)',
-                      display: 'flex',
-                      gap: 'var(--spacing-sm)'
-                    }}>
-                      {leave.status === leaveStatuses.PENDING && (
-                        <>
-                          <button
-                            className="btn btn-success btn-sm"
-                            onClick={() => {
-                              handleApprove(leave);
-                              setShowLeaveDetail(false);
-                            }}
-                          >
-                            <CheckCircle size={16} />
-                            Onayla
-                          </button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              handleReject(leave);
-                              setShowLeaveDetail(false);
-                            }}
-                          >
-                            <XCircle size={16} />
-                            Reddet
-                          </button>
-                        </>
-                      )}
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          handleEditRequest(leave);
-                          setShowLeaveDetail(false);
-                        }}
-                      >
-                        <Edit size={16} />
-                        Düzenle
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => {
-                          handleDelete(leave);
-                          setShowLeaveDetail(false);
-                        }}
-                      >
-                        <Trash2 size={16} />
-                        Sil
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowLeaveDetail(false)}>
-                Kapat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* REVİZE ET VE TEKRAR ONAYA SUN POP-UP'I */}
+      <ResubmitModal
+        isOpen={Boolean(requestToResubmit)}
+        onClose={() => setRequestToResubmit(null)}
+        onConfirm={handleConfirmResubmit}
+        request={requestToResubmit}
+      />
+
     </div>
   );
 };

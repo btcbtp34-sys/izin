@@ -1,0 +1,503 @@
+/* ========================================================
+   MÜSTAKİL İZİN ONAY YÖNETİMİ SAYFASI - APPLE KURUMSAL STİL
+   ======================================================== */
+
+.approvals-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Toast Bildirimi */
+.approvals-toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  z-index: 2200;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.approvals-toast.toast-success {
+  background: #059669;
+  color: #ffffff;
+}
+
+.approvals-toast.toast-warning {
+  background: #d97706;
+  color: #ffffff;
+}
+
+/* 1. Başlık Alanı */
+.approvals-header-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.approvals-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.approvals-page-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.4px;
+}
+
+.role-indicator-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #dbeafe;
+}
+
+.approvals-page-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.btn-apple-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.btn-apple-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* 2. Sayaç Kartları */
+.approvals-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.metric-card.active {
+  border-width: 1.5px;
+}
+
+.metric-card.card-amber.active {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.metric-card.card-green.active {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.metric-card.card-red.active {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.metric-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-icon-box.amber { background: #fef3c7; color: #b45309; }
+.metric-icon-box.green { background: #d1fae5; color: #047857; }
+.metric-icon-box.red { background: #fee2e2; color: #b91c1c; }
+
+.metric-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.metric-count {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.metric-days {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 3. Filtre Barı */
+.approvals-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.filter-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  min-width: 280px;
+  flex: 1;
+  max-width: 440px;
+}
+
+.search-icon {
+  color: #94a3b8;
+}
+
+.filter-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+  width: 100%;
+}
+
+.filter-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-select-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  outline: none;
+  cursor: pointer;
+}
+
+/* 4. Tablo Kartı */
+.approvals-table-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.approvals-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.approvals-data-table thead th {
+  background: #f8fafc;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.3px;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+
+.approval-row {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.approval-row:hover {
+  background-color: #f8fafc;
+}
+
+.approval-row td {
+  padding: 14px 16px;
+  vertical-align: middle;
+}
+
+/* Çalışan Kolonu */
+.emp-info-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emp-avatar-monogram {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.emp-name-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.emp-full-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emp-collar-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.emp-collar-tag.blue { background: #e0f2fe; color: #0284c7; }
+.emp-collar-tag.foreman { background: #fef3c7; color: #b45309; }
+.emp-collar-tag.white { background: #f3e8ff; color: #7e22ce; }
+
+.duration-highlight {
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.leave-type-pill {
+  font-size: 11px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.reason-text {
+  color: #64748b;
+  font-size: 12.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 220px;
+}
+
+/* Durum Rozeti */
+.approval-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-approved {
+  background: #d1fae5;
+  color: #047857;
+}
+.status-approved .status-dot { background: #10b981; }
+
+.status-pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+.status-pending .status-dot { background: #f59e0b; }
+
+.status-rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.status-rejected .status-dot { background: #ef4444; }
+
+.status-planned {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.status-planned .status-dot { background: #2563eb; }
+
+/* İşlem Butonları */
+.action-buttons-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-action-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.btn-action-icon.approve {
+  background: #10b981;
+  color: #ffffff;
+}
+.btn-action-icon.approve:hover {
+  background: #059669;
+}
+
+.btn-action-icon.reject {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.btn-action-icon.reject:hover {
+  background: #fecaca;
+}
+
+.btn-action-icon.resubmit {
+  background: #f59e0b;
+  color: #ffffff;
+}
+.btn-action-icon.resubmit:hover {
+  background: #d97706;
+}
+
+.btn-action-icon.detail {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+.btn-action-icon.detail:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.reason-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rejection-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #dc2626;
+  background: #fee2e2;
+  padding: 1px 6px;
+  border-radius: 4px;
+  width: fit-content;
+  font-weight: 600;
+}
+
+.badge-done {
+  font-size: 11.5px;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.approvals-empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+}
+
+.approvals-empty-state h3 {
+  font-size: 16px;
+  color: #0f172a;
+  margin: 0;
+}
+
+.approvals-empty-state p {
+  font-size: 13px;
+  margin: 0;
+}

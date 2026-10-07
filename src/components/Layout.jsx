@@ -1,101 +1,197 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Home, Calendar, Users, BarChart3, Settings, 
-  Menu, X, Bell, Search, User, LogOut, CalendarCheck, Cake
+  Calendar, CheckSquare, BarChart3, Settings as SettingsIcon,
+  User, LogOut, ChevronDown, Check, ShieldCheck, Wrench, Briefcase, Clock
 } from 'lucide-react';
 import './Layout.css';
+import { COLLAR_TYPES, DEMO_USERS, getEmployees, getLeaveRequests, leaveStatuses } from '../data/mockData';
 
-const Layout = ({ children, currentUser, onLogout }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+const Layout = ({ children, currentUser, onSelectUser, onLogout, activeTab, onTabChange }) => {
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const modeMenuRef = useRef(null);
+  const profileMenuRef = useRef(null);
 
-  const menuItems = [
-    { icon: Home, label: 'Ana Sayfa', path: '/' },
-    { icon: Calendar, label: 'İzin Planlama', path: '/planning' },
-    { icon: CalendarCheck, label: 'Takvim Planlama', path: '/calendar-planning' },
-    { icon: Cake, label: 'Bugün Doğanlar', path: '/birthdays' },
-    { icon: Users, label: 'Çalışanlar', path: '/employees' },
-    { icon: BarChart3, label: 'Raporlar', path: '/reports' },
-    { icon: Settings, label: 'Ayarlar', path: '/settings' }
+  const currentPath = window.location.hash.substring(1) || '/planning';
+  const allRequests = getLeaveRequests();
+  const pendingCount = allRequests.filter(r => r.status === leaveStatuses.PENDING).length;
+
+  // Dışarı tıklandığında dropdownları kapat
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target)) {
+        setModeDropdownOpen(false);
+      }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const menuTabs = [
+    { id: 'planning', label: 'İzin Planlama', path: '/planning', icon: Calendar },
+    { id: 'approvals', label: 'İzin Onayları', path: '/approvals', icon: CheckSquare, badge: pendingCount },
+    { id: 'overtime', label: 'Fazla Mesai Onay', path: '/overtime', icon: Clock, badge: 13 },
+    { id: 'reports', label: 'Raporlar', path: '/reports', icon: BarChart3 },
+    { id: 'settings', label: 'Ayarlar', path: '/settings', icon: SettingsIcon }
   ];
 
-  const currentPath = window.location.hash.substring(1) || '/';
+  const initials = `${currentUser?.firstName?.[0] || 'H'}${currentUser?.lastName?.[0] || 'K'}`;
+
+  // Mod ikonunu belirle (Kesinlikle emoji yok, sadece svg ikon)
+  const getModeIcon = (user) => {
+    if (user?.isManager) return <ShieldCheck size={16} className="mode-role-icon icon-manager" />;
+    if (user?.isForeman) return <Wrench size={16} className="mode-role-icon icon-foreman" />;
+    return <Briefcase size={16} className="mode-role-icon icon-white" />;
+  };
+
+  const getModeLabel = (user) => {
+    if (user?.isManager) return 'Yönetici Modu';
+    if (user?.isForeman) return 'Formen Modu';
+    return 'Çalışan';
+  };
+
+  const employees = getEmployees();
 
   return (
-    <div className="layout">
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="logo">
-            <Calendar className="logo-icon" />
-            {sidebarOpen && <span className="logo-text">İzin Yönetim</span>}
-          </div>
-          <button 
-            className="toggle-btn desktop-only"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <Menu size={20} />
-          </button>
-        </div>
-
-        <nav className="sidebar-nav">
-          {menuItems.map((item) => (
-            <a
-              key={item.path}
-              href={`#${item.path}`}
-              className={`nav-item ${currentPath === item.path ? 'active' : ''}`}
-              onClick={() => setMobileMenuOpen(false)}
+    <div className="apple-app-container">
+      {/* APPLE TARZI KURUMSAL TOPBAR */}
+      <header className="apple-navbar">
+        <div className="apple-navbar-inner">
+          
+          {/* Sol: Monogram Logo & Menü Sekmeleri */}
+          <div className="navbar-section-left">
+            <div 
+              className="apple-brand-badge" 
+              title={`${currentUser?.firstName} ${currentUser?.lastName} - ${getModeLabel(currentUser)}`}
             >
-              <item.icon size={20} />
-              {sidebarOpen && <span>{item.label}</span>}
-            </a>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="user-info">
-            <div className="user-avatar">
-              <User size={20} />
+              <span>{initials}</span>
             </div>
-            {sidebarOpen && (
-              <div className="user-details">
-                <div className="user-name">{currentUser?.firstName} {currentUser?.lastName}</div>
-                <div className="user-role">{currentUser?.position}</div>
-              </div>
-            )}
+
+            <nav className="apple-nav-tabs">
+              {menuTabs.map((tab) => {
+                const Icon = tab.icon;
+                const isTabActive = currentPath === tab.path || (currentPath === '/' && tab.path === '/planning');
+
+                return (
+                  <button
+                    key={tab.id}
+                    className={`apple-tab-button ${isTabActive ? 'active' : ''}`}
+                    onClick={() => {
+                      window.location.hash = `#${tab.path}`;
+                      if (onTabChange) onTabChange(tab.id);
+                    }}
+                  >
+                    <Icon size={16} className="tab-icon" />
+                    <span>{tab.label}</span>
+                    {tab.badge > 0 && (tab.id === 'approvals' || tab.id === 'overtime') && (
+                      <span className="apple-tab-badge">{tab.badge}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
-          {sidebarOpen && (
-            <button className="logout-btn" onClick={onLogout}>
-              <LogOut size={18} />
-              <span>Çıkış</span>
-            </button>
-          )}
+
+          {/* Sağ: İnteraktif Mod Seçici & Profil Menüsü */}
+          <div className="navbar-section-right">
+            
+            {/* 1. PLANLAMA MODU SEÇİCİ DROPDOWN (ÇALIŞAN) */}
+            <div className="apple-dropdown-wrapper" ref={modeMenuRef}>
+              <button 
+                className={`apple-mode-selector-btn ${modeDropdownOpen ? 'open' : ''}`}
+                onClick={() => setModeDropdownOpen(!modeDropdownOpen)}
+                title="Sistem rolünü ve kullanıcı modunu değiştirin"
+              >
+                {getModeIcon(currentUser)}
+                <span className="mode-btn-text">{getModeLabel(currentUser)}</span>
+                <ChevronDown size={14} className="mode-chevron" />
+              </button>
+
+              {modeDropdownOpen && (
+                <div className="apple-menu-dropdown mode-dropdown-menu">
+                  <div className="dropdown-section-title">Kullanıcı Rolü & Modu</div>
+
+                  {DEMO_USERS.map((u) => {
+                    const emp = employees.find(e => e.id === u.id) || u;
+                    const isSelected = currentUser?.id === emp.id;
+
+                    return (
+                      <button
+                        key={emp.id}
+                        className={`apple-menu-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                          if (onSelectUser) onSelectUser(emp);
+                          setModeDropdownOpen(false);
+                        }}
+                      >
+                        <div className="item-icon-col">
+                          {getModeIcon(emp)}
+                        </div>
+                        <div className="item-details-col">
+                          <div className="item-title">{getModeLabel(emp)}</div>
+                          <div className="item-subtitle">{emp.firstName} {emp.lastName} • {emp.department}</div>
+                        </div>
+                        {isSelected && <Check size={16} className="item-check-icon" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. PROFİL MENÜSÜ */}
+            <div className="apple-dropdown-wrapper" ref={profileMenuRef}>
+              <button 
+                className="apple-profile-btn"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                title={`${currentUser?.firstName} ${currentUser?.lastName}`}
+              >
+                <User size={17} />
+              </button>
+
+              {profileDropdownOpen && (
+                <div className="apple-menu-dropdown profile-dropdown-menu">
+                  <div className="profile-card-header">
+                    <div className="profile-avatar-circle">{initials}</div>
+                    <div className="profile-text-group">
+                      <div className="profile-name">{currentUser?.firstName} {currentUser?.lastName}</div>
+                      <div className="profile-dept">{currentUser?.department} • {currentUser?.position}</div>
+                      <div className="profile-role-pill">{currentUser?.collarType || 'Yönetici'}</div>
+                    </div>
+                  </div>
+
+                  <div className="dropdown-hr" />
+
+                  <button 
+                    className="apple-menu-item item-logout"
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      if (onLogout) onLogout();
+                    }}
+                  >
+                    <div className="item-icon-col">
+                      <LogOut size={16} />
+                    </div>
+                    <div className="item-details-col">
+                      <div className="item-title">Oturumu Kapat</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+
         </div>
-      </aside>
+      </header>
 
-      {/* Main Content */}
-      <div className="main-content">
-        {/* Mobile Menu Button - Fixed Position */}
-        <button 
-          className="mobile-menu-btn"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-
-        {/* Page Content */}
-        <main className="page-content">
-          {children}
-        </main>
-      </div>
-
-      {/* Mobile Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="mobile-overlay"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+      {/* ANA İÇERİK */}
+      <main className="apple-main-canvas">
+        {children}
+      </main>
     </div>
   );
 };
