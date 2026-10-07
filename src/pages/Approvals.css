@@ -39,51 +39,6 @@
   color: #ffffff;
 }
 
-/* 1. Başlık Alanı */
-.approvals-header-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.approvals-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.title-with-badge {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.approvals-page-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0;
-  letter-spacing: -0.4px;
-}
-
-.role-indicator-badge {
-  font-size: 11.5px;
-  font-weight: 600;
-  background: #eff6ff;
-  color: #2563eb;
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid #dbeafe;
-}
-
-.approvals-page-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0;
-}
-
 .btn-apple-primary {
   display: flex;
   align-items: center;
@@ -92,12 +47,13 @@
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 9px 18px;
+  padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  white-space: nowrap;
 }
 
 .btn-apple-primary:hover {
@@ -105,29 +61,38 @@
   transform: translateY(-1px);
 }
 
-/* 2. Sayaç Kartları */
+.btn-sm-action {
+  padding: 7px 14px !important;
+  font-size: 12.5px !important;
+  border-radius: 7px !important;
+}
+
+/* 1. Sayaç Kartları (Minimal & Kompakt) */
 .approvals-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
 }
 
 .metric-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px 18px;
+  border-radius: 8px;
+  padding: 8px 14px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  min-height: 42px;
+  box-sizing: border-box;
 }
 
 .metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .metric-card.active {
@@ -149,25 +114,27 @@
   background: #fef2f2;
 }
 
-.metric-header {
+.metric-left-col {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
 }
 
 .metric-title {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: #475569;
+  white-space: nowrap;
 }
 
 .metric-icon-box {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .metric-icon-box.amber { background: #fef3c7; color: #b45309; }
@@ -177,19 +144,21 @@
 .metric-numbers {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .metric-count {
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 800;
   color: #0f172a;
 }
 
 .metric-days {
-  font-size: 12px;
+  font-size: 11px;
   color: #64748b;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 /* 3. Filtre Barı */

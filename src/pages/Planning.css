@@ -854,41 +854,61 @@
 
 .col-dept {
   left: 0;
-  width: 105px;
-  min-width: 105px;
-  max-width: 105px;
+  width: 95px;
+  min-width: 95px;
+  max-width: 95px;
   text-align: left !important;
-  padding-left: 14px !important;
+  padding-left: 12px !important;
   font-weight: 700;
   color: #0f172a;
 }
 
 .col-emp {
-  left: 105px;
-  width: 145px;
-  min-width: 145px;
-  max-width: 145px;
+  left: 95px;
+  width: 135px;
+  min-width: 135px;
+  max-width: 135px;
   text-align: left !important;
   padding-left: 10px !important;
   font-weight: 700;
   color: #0f172a;
 }
 
+.col-transferred {
+  left: 230px;
+  width: 65px;
+  min-width: 65px;
+  max-width: 65px;
+  text-align: center !important;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.col-earned {
+  left: 295px;
+  width: 65px;
+  min-width: 65px;
+  max-width: 65px;
+  text-align: center !important;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .col-planned {
-  left: 250px;
-  width: 70px;
-  min-width: 70px;
-  max-width: 70px;
+  left: 360px;
+  width: 65px;
+  min-width: 65px;
+  max-width: 65px;
   text-align: center !important;
   font-weight: 700;
   color: #0f172a;
 }
 
 .col-remaining {
-  left: 320px;
-  width: 85px;
-  min-width: 85px;
-  max-width: 85px;
+  left: 425px;
+  width: 75px;
+  min-width: 75px;
+  max-width: 75px;
   text-align: center !important;
   font-weight: 700;
   color: #0f172a;
@@ -998,6 +1018,8 @@
   color: #b45309;
 }
 
+.transferred-cell,
+.earned-cell,
 .planned-cell {
   text-align: center;
   border-bottom: 1px solid #f1f5f9;
@@ -1016,10 +1038,22 @@
   font-weight: 700;
 }
 
+.text-emerald-bold {
+  color: #059669;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.text-amber-bold {
+  color: #d97706;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
 .text-green-bold {
   color: #10b981;
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 /* Gün Izgarası Hücreleri */

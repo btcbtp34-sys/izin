@@ -5,12 +5,12 @@ import {
   Users, Save, Send, Maximize2, Minimize2, User,
   CheckSquare, BarChart3, Settings as SettingsIcon, X,
   CalendarCheck, AlertCircle, Info, ChevronDown, RotateCcw,
-  Shield, HardHat, Briefcase, UserCheck, ArrowRight
+  Shield, ShieldCheck, HardHat, Briefcase, UserCheck, ArrowRight
 } from 'lucide-react';
 import {
   getEmployees, getLeaveRequests, addLeaveRequest, updateLeaveRequest,
   deleteLeaveRequest, leaveStatuses, COLLAR_TYPES, DEMO_USERS,
-  validateAndApplyRules
+  validateAndApplyRules, calculateLeaveDays, addWorkingDays
 } from '../data/mockData';
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth,
@@ -21,6 +21,9 @@ import { tr } from 'date-fns/locale';
 import { 
   WorkflowTimeline, ApprovalConfirmModal, RejectionReasonModal, ResubmitModal 
 } from '../components/ApprovalModals';
+import {
+  RuleNoticeModal, RuleDirectoryModal, CustomConfirmModal
+} from '../components/RuleModals';
 import './Planning.css';
 
 const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUser }) => {
@@ -43,6 +46,11 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   const [requestToResubmit, setRequestToResubmit] = useState(null);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'warning' | 'error', message: '' }
   const [ruleNotices, setRuleNotices] = useState([]);
+  
+  // Kural Setleri Pop-up Modalları (Chrome Alert/Confirm Yerine)
+  const [rulePopup, setRulePopup] = useState(null);
+  const [showRulesDirectory, setShowRulesDirectory] = useState(false);
+  const [customConfirmModal, setCustomConfirmModal] = useState(null);
 
   // Sürükle - Bırak (Drag & Drop) durumu
   const [draggedLeave, setDraggedLeave] = useState(null);
@@ -101,11 +109,12 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     return list;
   }, [employees, currentUser, selectedDepartment, refreshKey]);
 
-  // Seçilen ayın günleri (01, 02, 03... 31)
+  // Seçilen ayın günleri (Pazar günleri gösterilmez: getDay === 0 hariç tutulur)
   const monthDays = useMemo(() => {
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
-    return eachDayOfInterval({ start, end });
+    const allDays = eachDayOfInterval({ start, end });
+    return allDays.filter(day => getDay(day) !== 0);
   }, [currentDate]);
 
   // Ay ve filtreye göre izin talepleri
@@ -113,32 +122,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     return allRequests;
   }, [allRequests, refreshKey]);
 
-  // Üst İstatistikler (Hak Edilen, Devreden, Gelecek, Planlanan, Onay Bekleyen)
-  const stats = useMemo(() => {
-    const totalEntitled = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.currentYearAllocation || 14), 0);
-    const totalPrevious = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.previousBalance || 0), 0);
-    const totalFuture = filteredEmployees.reduce((sum, e) => sum + (e.annualLeave?.futureAllocation || 8), 0);
-    
-    const plannedDays = relevantRequests
-      .filter(r => r.status === leaveStatuses.PLANNED)
-      .reduce((sum, r) => sum + (r.duration || 0), 0);
 
-    const pendingDays = relevantRequests
-      .filter(r => r.status === leaveStatuses.PENDING)
-      .reduce((sum, r) => sum + (r.duration || 0), 0);
-
-    const avgEntitled = filteredEmployees.length ? Math.round(totalEntitled / filteredEmployees.length) : 14;
-    const avgPrevious = filteredEmployees.length ? Math.round(totalPrevious / filteredEmployees.length) : 6;
-    const avgFuture = filteredEmployees.length ? Math.round(totalFuture / filteredEmployees.length) : 8;
-
-    return {
-      entitled: avgEntitled,
-      previous: avgPrevious,
-      future: avgFuture,
-      planned: plannedDays || 12,
-      pending: pendingDays || 4
-    };
-  }, [filteredEmployees, relevantRequests]);
 
   // Ay gezinme işlemleri
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -200,7 +184,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.employeeId) {
-      alert('Lütfen bir çalışan seçin');
+      showToast('Lütfen bir çalışan seçin', 'warning');
       return;
     }
 
@@ -210,7 +194,14 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     // KURALLARI DENETLE VE UYGULA (Kural 4, 5, 6, 7 vb.)
     const validation = validateAndApplyRules(formData, relevantRequests, employee);
     if (!validation.isValid) {
-      alert(validation.error);
+      // Chrome alert YERİNE özel şık Kural Pop-up ekranı
+      setRulePopup({
+        type: 'error',
+        title: 'Planlama Kuralı Kısıtlaması',
+        subtitle: `${employee.firstName} ${employee.lastName} için girilen izin şirket iş kuralına takıldı.`,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        error: validation.error
+      });
       return;
     }
 
@@ -243,8 +234,20 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
       showToast('Yeni izin planı başarıyla oluşturuldu!');
     }
 
+    // Kural otomatik uygulama bildirimleri varsa Chrome alert yerine özel pop-up aç
     if (validation.notices && validation.notices.length > 0) {
-      alert(`Planlama Kuralları Uygulandı:\n• ${validation.notices.join('\n• ')}`);
+      setRulePopup({
+        type: 'notice',
+        title: 'İş Kuralları Otomatik Uygulandı',
+        subtitle: `${employee.firstName} ${employee.lastName} için izin tarihleri iş kurallarına göre uyarlandı.`,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        notices: validation.notices,
+        dateInfo: {
+          start: format(new Date(validation.adjustedStartDate), 'dd.MM.yyyy'),
+          end: format(new Date(validation.adjustedEndDate), 'dd.MM.yyyy'),
+          duration: validation.adjustedDuration
+        }
+      });
     }
 
     setShowModal(false);
@@ -350,12 +353,23 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
 
   // İzin Silme
   const handleDelete = (request) => {
-    if (window.confirm(`${request.employeeName} için izin planını silmek istediğinize emin misiniz?`)) {
-      deleteLeaveRequest(request.id);
-      setShowRequestDetail(false);
-      setRefreshKey(prev => prev + 1);
-      showToast('İzin planı silindi.');
-    }
+    setCustomConfirmModal({
+      title: 'İzin Planını Sil',
+      subtitle: `${request.employeeName} için planlanan izin kaydı silinecektir.`,
+      icon: 'alert',
+      confirmText: 'Evet, Sil',
+      confirmStyle: 'danger',
+      details: [
+        'Bu işlem seçilen izin planını takvim matrisinden tamamen kaldırır.',
+        'Silinen plan daha sonra çalışan veya formen tarafından tekrar oluşturulabilir.'
+      ],
+      onConfirm: () => {
+        deleteLeaveRequest(request.id);
+        setShowRequestDetail(false);
+        setRefreshKey(prev => prev + 1);
+        showToast('İzin planı silindi.');
+      }
+    });
   };
 
   // Planı Kaydet Butonu
@@ -367,16 +381,28 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
   const handleSendForApproval = () => {
     const plannedReqs = relevantRequests.filter(r => r.status === leaveStatuses.PLANNED);
     if (plannedReqs.length === 0) {
-      alert('Onaya gönderilecek planlanan izin bulunamadı.');
+      showToast('Onaya gönderilecek planlanan izin bulunamadı.', 'warning');
       return;
     }
-    if (window.confirm(`${plannedReqs.length} adet planlanan izin yönetici onayına gönderilecek. Onaylıyor musunuz?`)) {
-      plannedReqs.forEach(req => {
-        updateLeaveRequest(req.id, { status: leaveStatuses.PENDING });
-      });
-      setRefreshKey(prev => prev + 1);
-      showToast(`${plannedReqs.length} izin talebi yönetici onayına gönderildi! Durum: Onay Bekliyor (Turuncu)`);
-    }
+    setCustomConfirmModal({
+      title: 'İzin Taleplerini Onaya Gönderme',
+      subtitle: `${plannedReqs.length} adet planlanan izin yönetici onayına sunulacak.`,
+      icon: 'send',
+      details: [
+        'Tüm seçili planlanan izinler "Onay Bekliyor" (Turuncu) durumuna alınacaktır.',
+        'Yönetici onayladığında izinler kesinleşip "Onaylandı" (Yeşil) durumuna geçecektir.',
+        'İş kurallarına uygunluk kontrolleri sistemce doğrulanmıştır.'
+      ],
+      confirmText: 'Evet, Onaya Gönder',
+      confirmStyle: 'dark',
+      onConfirm: () => {
+        plannedReqs.forEach(req => {
+          updateLeaveRequest(req.id, { status: leaveStatuses.PENDING });
+        });
+        setRefreshKey(prev => prev + 1);
+        showToast(`${plannedReqs.length} izin talebi yönetici onayına gönderildi! Durum: Onay Bekliyor (Turuncu)`);
+      }
+    });
   };
 
   // Sürükle & Bırak (Drag and Drop) İşleyicileri
@@ -397,7 +423,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
 
     // Sadece aynı çalışana veya formenin yönettiği çalışana taşınabilir
     const newStartDate = targetDay;
-    const newEndDate = addDays(newStartDate, draggedLeave.duration - 1);
+    // Pazar günlerini saymadan yeni bitiş tarihini hesapla
+    const newEndDate = addWorkingDays(newStartDate, draggedLeave.duration - 1);
 
     const updatedData = {
       ...draggedLeave,
@@ -411,7 +438,13 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     // Kuralları uygula
     const validation = validateAndApplyRules(updatedData, relevantRequests, employee);
     if (!validation.isValid) {
-      alert(validation.error);
+      setRulePopup({
+        type: 'error',
+        title: 'Taşıma Kuralı Kısıtlaması',
+        subtitle: `${employee.firstName} ${employee.lastName} için taşınan tarih şirket iş kuralına takıldı.`,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        error: validation.error
+      });
       setDraggedLeave(null);
       return;
     }
@@ -424,16 +457,27 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     });
 
     if (validation.notices && validation.notices.length > 0) {
-      showToast(`Taşındı: ${validation.notices[0]}`, 'warning');
+      setRulePopup({
+        type: 'notice',
+        title: 'Taşıma Sonrası Kural Uygulandı',
+        subtitle: `${employee.firstName} ${employee.lastName} için izin tarihleri iş kurallarına göre uyarlandı.`,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        notices: validation.notices,
+        dateInfo: {
+          start: format(new Date(validation.adjustedStartDate), 'dd.MM.yyyy'),
+          end: format(new Date(validation.adjustedEndDate), 'dd.MM.yyyy'),
+          duration: validation.adjustedDuration
+        }
+      });
     } else {
-      showToast(`İzin ${format(newStartDate, 'dd MMMM', { locale: tr })} tarihine taşındı!`);
+      showToast(`İzin ${format(newStartDate, 'dd.MM.yyyy')} tarihine taşındı!`);
     }
 
     setDraggedLeave(null);
     setRefreshKey(prev => prev + 1);
   };
 
-  // Otomatik Planlama Algoritması
+  // Otomatik Planlama Algoritması (Pazar günleri hariç iş günleri hesabı)
   const handleAutoPlanning = () => {
     const unplannedEmployees = filteredEmployees.filter(emp => {
       const empRequests = relevantRequests.filter(r => r.employeeId === emp.id);
@@ -441,14 +485,29 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     });
 
     if (unplannedEmployees.length === 0) {
-      alert('Seçili çalışanların tümü için zaten izin planlaması mevcuttur.');
+      showToast('Seçili çalışanların tümü için zaten izin planlaması mevcuttur.', 'info');
       return;
     }
 
-    const confirmMsg = `${unplannedEmployees.length} çalışan için ${format(currentDate, 'MMMM yyyy', { locale: tr })} ayında otomatik izin planlaması yapılacak.\n\nHer çalışan için:\n- Cuma/Cumartesi kuralları ve süre limitleri uygulanacak\n- Planlanan izinler Onay Bekliyor (Turuncu) durumunda oluşturulacak\n\nDevam edilsin mi?`;
-    
-    if (!window.confirm(confirmMsg)) return;
+    setCustomConfirmModal({
+      title: 'Otomatik İzin Planlama Sihirbazı',
+      subtitle: `${unplannedEmployees.length} çalışan için ${format(currentDate, 'MMMM yyyy', { locale: tr })} ayında otomatik dengeli plan oluşturulacak.`,
+      icon: 'sparkles',
+      details: [
+        'Pazar günleri haftalık dinlenme tatilidir; süreye dahil edilmez ve takvimde yer almaz.',
+        'Cuma ve Cumartesi günleri için otomatik hafta sonu bağlama kuralları işletilir.',
+        'İki adet 6 günlük izin arasında en az 4 tam gün kuralı kontrol edilir.',
+        'Oluşturulan izinler yöneticinin incelemesi için "Onay Bekliyor" (Turuncu) durumunda atanır.'
+      ],
+      confirmText: 'Otomatik Planlamayı Başlat',
+      confirmStyle: 'primary',
+      onConfirm: () => {
+        executeAutoPlanning(unplannedEmployees);
+      }
+    });
+  };
 
+  const executeAutoPlanning = (unplannedEmployees) => {
     const baseMonth = currentDate.getMonth();
     const baseYear = currentDate.getFullYear();
     let createdCount = 0;
@@ -456,8 +515,12 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     unplannedEmployees.forEach((emp, index) => {
       const daysToAllocate = Math.min(Math.max(Math.floor((emp.annualLeave?.available || 14) * 0.35), 3), 5);
       const startDayNum = Math.min(6 + (index * 4) % 18, 22);
-      const startDate = new Date(baseYear, baseMonth, startDayNum);
-      const endDate = addDays(startDate, daysToAllocate - 1);
+      let startDate = new Date(baseYear, baseMonth, startDayNum);
+      if (getDay(startDate) === 0) {
+        startDate = addDays(startDate, 1); // Pazar günüyse Pazartesi'ye al
+      }
+      const endDate = addWorkingDays(startDate, daysToAllocate - 1);
+      const calculatedDuration = calculateLeaveDays(startDate, endDate);
 
       addLeaveRequest({
         employeeId: emp.id,
@@ -466,7 +529,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
         managerId: emp.managerId,
         startDate: format(startDate, 'yyyy-MM-dd'),
         endDate: format(endDate, 'yyyy-MM-dd'),
-        duration: daysToAllocate,
+        duration: calculatedDuration,
         type: 'Planlı',
         reason: 'Otomatik Yıllık İzin Planı',
         status: leaveStatuses.PENDING // Turuncu onay bekliyor
@@ -475,7 +538,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     });
 
     setRefreshKey(prev => prev + 1);
-    showToast(`Otomatik planlama tamamlandı! ${createdCount} çalışan için izin planı eklendi.`);
+    showToast(`${createdCount} çalışan için kurallara uygun otomatik planlama oluşturuldu ve onaya sunuldu!`);
   };
 
   // İzin Çubuğu Renkleri (Kullanıcı İsteği: Onay bekliyor turuncu, onaylandı yeşil, planlandı mavi, geri gönderildi kırmızı)
@@ -493,7 +556,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     return { bg: '#2563eb', border: '#1d4ed8', color: '#ffffff' }; // Planlandı: Mavi
   };
 
-  // Çalışanın o aydaki izin barlarını hesapla
+  // Çalışanın o aydaki izin barlarını hesapla (Pazar günleri hariç grid sütunlarına tam oturan hesaplama)
   const getEmployeeMonthLeaves = (employeeId) => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
@@ -506,23 +569,23 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
     });
 
     return empRequests.map(req => {
-      const rStart = new Date(req.startDate);
-      const rEnd = new Date(req.endDate);
+      // Bu talebin bu ay içindeki görünür (Pazar günleri hariç) günlerini bul
+      const leaveVisibleDays = monthDays.filter(d => {
+        const dStr = format(d, 'yyyy-MM-dd');
+        return dStr >= req.startDate && dStr <= req.endDate;
+      });
 
-      const clampedStart = rStart < monthStart ? monthStart : rStart;
-      const clampedEnd = rEnd > monthEnd ? monthEnd : rEnd;
+      if (leaveVisibleDays.length === 0) return null;
 
-      const startDayIndex = clampedStart.getDate();
-      const endDayIndex = clampedEnd.getDate();
-      const spanDays = endDayIndex - startDayIndex + 1;
+      const firstVisibleDateStr = format(leaveVisibleDays[0], 'yyyy-MM-dd');
+      const spanDays = leaveVisibleDays.length;
 
       return {
         ...req,
-        startDayIndex,
-        endDayIndex,
+        firstVisibleDateStr,
         spanDays
       };
-    });
+    }).filter(Boolean);
   };
 
   const getEmployeePlannedTotal = (employeeId) => {
@@ -584,66 +647,17 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
             </div>
           </div>
 
-          {/* İstatistik Kartları (Apple UI Tarzı Şık Rozetler) */}
-          <div className="leave-stats-badges-container">
-            <div className="stat-badge-chip chip-entitled">
-              <div className="chip-header">
-                <span className="chip-dot dot-green"></span>
-                <span className="chip-label">Hak Edilen</span>
-              </div>
-              <div className="chip-metric">
-                <span className="chip-number">{stats.entitled}</span>
-                <span className="chip-unit">gün</span>
-              </div>
-            </div>
-
-            <div className="stat-badge-chip chip-previous">
-              <div className="chip-header">
-                <span className="chip-dot dot-blue"></span>
-                <span className="chip-label">Devreden</span>
-              </div>
-              <div className="chip-metric">
-                <span className="chip-number">{stats.previous}</span>
-                <span className="chip-unit">gün</span>
-              </div>
-            </div>
-
-            <div className="stat-badge-chip chip-future">
-              <div className="chip-header">
-                <span className="chip-dot dot-purple"></span>
-                <span className="chip-label">Gelecek</span>
-              </div>
-              <div className="chip-metric">
-                <span className="chip-number">{stats.future}</span>
-                <span className="chip-unit">gün</span>
-              </div>
-            </div>
-
-            <div className="stat-badge-chip chip-planned">
-              <div className="chip-header">
-                <span className="chip-dot dot-indigo"></span>
-                <span className="chip-label">Planlanan</span>
-              </div>
-              <div className="chip-metric">
-                <span className="chip-number">{stats.planned}</span>
-                <span className="chip-unit">gün</span>
-              </div>
-            </div>
-
-            <div className="stat-badge-chip chip-pending">
-              <div className="chip-header">
-                <span className="chip-dot dot-amber"></span>
-                <span className="chip-label">Onay Bekleyen</span>
-              </div>
-              <div className="chip-metric">
-                <span className="chip-number">{stats.pending}</span>
-                <span className="chip-unit">gün</span>
-              </div>
-            </div>
-          </div>
-
           {/* Eylem Butonları */}
           <div className="action-buttons-group">
+            <button 
+              className="btn-action-outline btn-rules-modal-trigger" 
+              onClick={() => setShowRulesDirectory(true)}
+              title="Aktif şirket iş kurallarını ve limitleri incele"
+            >
+              <ShieldCheck size={16} />
+              <span>Kural Setleri</span>
+            </button>
+
             <button 
               className="btn-action-outline" 
               onClick={handleAutoPlanning}
@@ -742,21 +756,24 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
         <table className="timeline-gantt-table">
           <thead>
             <tr className="gantt-head-row">
-              <th className="sticky-col col-dept">Departman</th>
-              <th className="sticky-col col-emp">Çalışan</th>
-              <th className="sticky-col col-planned">Planlanan</th>
-              <th className="sticky-col col-remaining">Toplam Kalan</th>
+              <th className="sticky-col col-dept" title="Departman">Departman</th>
+              <th className="sticky-col col-emp" title="Çalışan">Çalışan</th>
+              <th className="sticky-col col-transferred" title="Önceki Yıldan Devreden İzin Hakkı">Devreden</th>
+              <th className="sticky-col col-earned" title="Mevcut Yıl Hak Edilen / Kazanılan İzin Hakkı">Kazanılan</th>
+              <th className="sticky-col col-planned" title="Planlanan İzin Gün Sayısı">Planlanan</th>
+              <th className="sticky-col col-remaining" title="Kalan Toplam İzin Bakiyesi">Toplam Kalan</th>
 
               {monthDays.map((day) => {
                 const dayNum = format(day, 'dd');
                 const dayName = format(day, 'EEE', { locale: tr });
-                const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+                const isSaturday = getDay(day) === 6;
                 const isCurrent = isToday(day);
 
                 return (
                   <th 
                     key={day.toISOString()} 
-                    className={`day-column-header ${isWeekend ? 'weekend-day-header' : ''} ${isCurrent ? 'today-day-header' : ''}`}
+                    className={`day-column-header ${isSaturday ? 'weekend-day-header' : ''} ${isCurrent ? 'today-day-header' : ''}`}
+                    title={`${format(day, 'dd.MM.yyyy')} (${format(day, 'EEEE', { locale: tr })})`}
                   >
                     <div className="day-header-number">{dayNum}</div>
                     <div className="day-header-name">{dayName}</div>
@@ -769,7 +786,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
           <tbody>
             {filteredEmployees.length === 0 ? (
               <tr>
-                <td colSpan={4 + monthDays.length} className="empty-table-cell">
+                <td colSpan={6 + monthDays.length} className="empty-table-cell">
                   Seçilen kriterlere uygun çalışan bulunamadı.
                 </td>
               </tr>
@@ -778,6 +795,8 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                 const leaves = getEmployeeMonthLeaves(employee.id);
                 const plannedDaysCount = getEmployeePlannedTotal(employee.id);
                 const remainingDaysCount = getEmployeeRemaining(employee);
+                const transferredDays = employee.annualLeave?.previousBalance ?? 0;
+                const earnedDays = employee.annualLeave?.currentYearAllocation ?? 14;
 
                 return (
                   <tr key={employee.id} className="gantt-employee-row">
@@ -795,30 +814,38 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                       </div>
                     </td>
 
-                    <td className="sticky-col col-planned planned-cell">
-                      <strong className="text-blue-bold">{plannedDaysCount}</strong>
+                    <td className="sticky-col col-transferred transferred-cell" title="Devreden İzin">
+                      <strong className="text-blue-bold">{transferredDays}</strong>
                     </td>
 
-                    <td className="sticky-col col-remaining remaining-cell">
+                    <td className="sticky-col col-earned earned-cell" title="Kazanılan İzin">
+                      <strong className="text-emerald-bold">{earnedDays}</strong>
+                    </td>
+
+                    <td className="sticky-col col-planned planned-cell" title="Planlanan İzin">
+                      <strong className="text-amber-bold">{plannedDaysCount}</strong>
+                    </td>
+
+                    <td className="sticky-col col-remaining remaining-cell" title="Toplam Kalan İzin">
                       <strong className="text-green-bold">{remainingDaysCount}</strong>
                     </td>
 
-                    {/* Gün Hücreleri ve Gantt Barları */}
+                    {/* Gün Hücreleri ve Gantt Barları (Pazar günleri hariç) */}
                     {monthDays.map((day) => {
-                      const dayNumber = day.getDate();
-                      const isWeekend = getDay(day) === 0 || getDay(day) === 6;
+                      const dayStr = format(day, 'yyyy-MM-dd');
+                      const isSaturday = getDay(day) === 6;
                       const isCurrent = isToday(day);
 
-                      const startingLeave = leaves.find(l => l.startDayIndex === dayNumber);
+                      const startingLeave = leaves.find(l => l.firstVisibleDateStr === dayStr);
 
                       return (
                         <td 
                           key={day.toISOString()} 
-                          className={`day-cell-grid ${isWeekend ? 'weekend-cell' : ''} ${isCurrent ? 'today-cell' : ''}`}
+                          className={`day-cell-grid ${isSaturday ? 'weekend-cell' : ''} ${isCurrent ? 'today-cell' : ''}`}
                           onClick={() => handleAddRequest(employee.id, day)}
                           onDragOver={handleDragOver}
                           onDrop={(e) => handleDropOnDay(e, employee, day)}
-                          title={`${format(day, 'dd MMMM yyyy', { locale: tr })} - Tıklayarak izin ekleyin veya mevcut izni buraya sürükleyip bırakın`}
+                          title={`${format(day, 'dd.MM.yyyy')} (${format(day, 'EEEE', { locale: tr })}) - Tıklayarak izin ekleyin veya mevcut izni buraya sürükleyip bırakın`}
                         >
                           {startingLeave && (() => {
                             const barStyle = getLeaveBarStyle(startingLeave);
@@ -838,7 +865,7 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                                   setSelectedRequest(startingLeave);
                                   setShowRequestDetail(true);
                                 }}
-                                title={`${startingLeave.employeeName} (${startingLeave.startDate} - ${startingLeave.endDate})\nDurum: ${startingLeave.status}\nSürükleyip başka güne taşıyabilirsiniz!`}
+                                title={`${startingLeave.employeeName} (${format(new Date(startingLeave.startDate), 'dd.MM.yyyy')} - ${format(new Date(startingLeave.endDate), 'dd.MM.yyyy')})\nSüre: ${startingLeave.duration} Gün (Pazar hariç)\nDurum: ${startingLeave.status}\nSürükleyip başka güne taşıyabilirsiniz!`}
                               >
                                 <span className="bar-label-text">
                                   İzin ({startingLeave.duration} gün)
@@ -883,6 +910,25 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
             
             <form onSubmit={handleSubmit} className="plan-modal-form">
               <div className="plan-modal-body">
+                {/* Kurallar Bilgilendirmesi */}
+                <div 
+                  className="rules-info-banner clickable-rules-banner"
+                  onClick={() => setShowRulesDirectory(true)}
+                  title="Tüm şirket iş kurallarını ve planlama sınırlarını incelemek için tıklayın"
+                >
+                  <Info size={18} className="rules-info-icon" />
+                  <div className="rules-info-text">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                      <strong>Planlama İş Kuralları:</strong>
+                      <span className="rules-banner-badge">Tüm Kural Setlerini Gör &rarr;</span>
+                    </div>
+                    <div>• <strong>Kural 4 (İki Adet 6 Günlük İzin):</strong> İki adet 6 günlük izin dönemi arasında en az 4 gün bulunmalıdır.</div>
+                    <div>• <strong>Kural 5 (Cuma İzni):</strong> Cuma günü izin seçildiğinde Cumartesi günü otomatik plana eklenir.</div>
+                    <div>• <strong>Kural 6 (Cumartesi İzni):</strong> Cumartesi günü izin seçildiğinde Pazartesi günü de otomatik plana eklenir (Pazar sayılmaz).</div>
+                    <div>• <strong>Kural 7 (Kısa Süreli İzin Limiti):</strong> 2 günden az olan izinler yılda en fazla 4 kez kullanılabilir.</div>
+                  </div>
+                </div>
+
                 {/* Çalışan Seçimi */}
                 <div className="form-group">
                   <label className="form-label required">Çalışan</label>
@@ -1053,18 +1099,18 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
                 <div className="detail-info-item">
                   <span className="info-title">Başlangıç</span>
                   <span className="info-value">
-                    {format(new Date(selectedRequest.startDate), 'dd MMMM yyyy', { locale: tr })}
+                    {format(new Date(selectedRequest.startDate), 'dd.MM.yyyy')}
                   </span>
                 </div>
                 <div className="detail-info-item">
                   <span className="info-title">Bitiş</span>
                   <span className="info-value">
-                    {format(new Date(selectedRequest.endDate), 'dd MMMM yyyy', { locale: tr })}
+                    {format(new Date(selectedRequest.endDate), 'dd.MM.yyyy')}
                   </span>
                 </div>
                 <div className="detail-info-item">
                   <span className="info-title">Süre</span>
-                  <span className="info-value bold-days">{selectedRequest.duration} Gün</span>
+                  <span className="info-value bold-days">{selectedRequest.duration} Gün (Pazar hariç)</span>
                 </div>
                 <div className="detail-info-item">
                   <span className="info-title">Tür</span>
@@ -1161,9 +1207,9 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
           { label: 'Departman', value: requestToApprove.department },
           { 
             label: 'Tarih Aralığı', 
-            value: `${format(new Date(requestToApprove.startDate), 'dd MMM', { locale: tr })} - ${format(new Date(requestToApprove.endDate), 'dd MMM yyyy', { locale: tr })}` 
+            value: `${format(new Date(requestToApprove.startDate), 'dd.MM.yyyy')} - ${format(new Date(requestToApprove.endDate), 'dd.MM.yyyy')}` 
           },
-          { label: 'İzin Süresi', value: `${requestToApprove.duration} Gün` }
+          { label: 'İzin Süresi', value: `${requestToApprove.duration} Gün (Pazar hariç)` }
         ] : []}
         confirmButtonText="Onayla ve Kaydet"
       />
@@ -1180,9 +1226,9 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
           { label: 'Departman', value: requestToReject.department },
           { 
             label: 'Tarih Aralığı', 
-            value: `${format(new Date(requestToReject.startDate), 'dd MMM', { locale: tr })} - ${format(new Date(requestToReject.endDate), 'dd MMM yyyy', { locale: tr })}` 
+            value: `${format(new Date(requestToReject.startDate), 'dd.MM.yyyy')} - ${format(new Date(requestToReject.endDate), 'dd.MM.yyyy')}` 
           },
-          { label: 'Talep Edilen Süre', value: `${requestToReject.duration} Gün` }
+          { label: 'Talep Edilen Süre', value: `${requestToReject.duration} Gün (Pazar hariç)` }
         ] : []}
         confirmButtonText="Geri Gönder ve Bildir"
         isOvertime={false}
@@ -1194,6 +1240,40 @@ const Planning = ({ currentUser, activeTab = 'planning', onTabChange, onSwitchUs
         onClose={() => setRequestToResubmit(null)}
         onConfirm={handleConfirmResubmit}
         request={requestToResubmit}
+      />
+
+      {/* 7. KURAL UYARI / BİLGİLENDİRME POP-UP'I (CHROME ALERT YERİNE) */}
+      <RuleNoticeModal
+        isOpen={Boolean(rulePopup)}
+        onClose={() => setRulePopup(null)}
+        type={rulePopup?.type || 'notice'}
+        title={rulePopup?.title}
+        subtitle={rulePopup?.subtitle}
+        employeeName={rulePopup?.employeeName}
+        error={rulePopup?.error}
+        notices={rulePopup?.notices}
+        dateInfo={rulePopup?.dateInfo}
+        onViewAllRules={() => setShowRulesDirectory(true)}
+      />
+
+      {/* 8. KURAL SETLERİ REHBERİ POP-UP'I */}
+      <RuleDirectoryModal
+        isOpen={showRulesDirectory}
+        onClose={() => setShowRulesDirectory(false)}
+      />
+
+      {/* 9. ÖZEL ONAY POP-UP'I (CHROME CONFIRM YERİNE) */}
+      <CustomConfirmModal
+        isOpen={Boolean(customConfirmModal)}
+        onClose={() => setCustomConfirmModal(null)}
+        onConfirm={customConfirmModal?.onConfirm || (() => {})}
+        title={customConfirmModal?.title}
+        subtitle={customConfirmModal?.subtitle}
+        icon={customConfirmModal?.icon}
+        details={customConfirmModal?.details}
+        confirmText={customConfirmModal?.confirmText}
+        cancelText={customConfirmModal?.cancelText}
+        confirmStyle={customConfirmModal?.confirmStyle}
       />
 
     </div>

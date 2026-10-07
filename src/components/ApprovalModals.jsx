@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { calculateLeaveDays } from '../data/mockData';
 import './ApprovalModals.css';
 
 /**
@@ -399,9 +400,9 @@ export const ResubmitModal = ({
 
   if (!isOpen || !request) return null;
 
-  // Hesaplanan gün sayısı
+  // Hesaplanan gün sayısı (Pazar günleri hariç)
   const calculatedDays = startDate && endDate 
-    ? Math.max(1, differenceInCalendarDays(new Date(endDate), new Date(startDate)) + 1)
+    ? calculateLeaveDays(startDate, endDate)
     : request.duration || 1;
 
   const quickRevisionNotes = [
@@ -461,13 +462,13 @@ export const ResubmitModal = ({
             <div className="summary-item">
               <span className="summary-label">Önceki Tarihler</span>
               <span className="summary-value" style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '12.5px' }}>
-                {request.startDate} - {request.endDate} ({request.duration} Gün)
+                {format(new Date(request.startDate), 'dd.MM.yyyy')} - {format(new Date(request.endDate), 'dd.MM.yyyy')} ({request.duration} Gün)
               </span>
             </div>
             <div className="summary-item">
               <span className="summary-label">Yeni Süre</span>
               <strong className="summary-value" style={{ color: '#d97706' }}>
-                {calculatedDays} Gün
+                {calculatedDays} Gün (Pazar hariç)
               </strong>
             </div>
           </div>

@@ -225,79 +225,55 @@ const Approvals = ({ currentUser, onSwitchUser }) => {
         </div>
       )}
 
-      {/* 1. SAYFA BAŞLIĞI VE ÖZET KARTLAR */}
-      <div className="approvals-header-section">
-        <div className="approvals-title-group">
-          <div className="title-with-badge">
-            <h1 className="approvals-page-title">İzin Onay Yönetimi</h1>
-            <span className="role-indicator-badge">
-              {currentUser?.isManager ? 'Yönetici Onay Yetkilisi' :
-               currentUser?.isForeman ? 'Formen Ekip Onay Takibi' : 'Bireysel Onay Takibi'}
-            </span>
-          </div>
-          <p className="approvals-page-subtitle">
-            {currentUser?.isManager 
-              ? 'Tüm departmanlardan gelen izin taleplerini inceleyin, onaylayın veya revize için geri gönderin.'
-              : currentUser?.isForeman
-              ? 'Mavi yakalı ekibinizin izin taleplerinin onay durumunu takip edin ve geri gönderilenleri güncelleyin.'
-              : 'İzin taleplerinizin güncel onay süreçlerini takip edin.'}
-          </p>
-        </div>
-
-        {currentUser?.isManager && stats.pendingCount > 0 && (
-          <button className="btn-apple-primary" onClick={() => setIsBatchApproveOpen(true)}>
-            <Check size={16} />
-            <span>Bekleyen Tümünü Onayla ({stats.pendingCount})</span>
-          </button>
-        )}
-      </div>
-
-      {/* 2. ÖZET İSTATİSTİK SAYAÇLARI */}
+      {/* 1. ÖZET İSTATİSTİK SAYAÇLARI (Minimal & Kompakt) */}
       <div className="approvals-metrics-grid">
         <div 
           className={`metric-card card-amber ${selectedStatus === leaveStatuses.PENDING ? 'active' : ''}`}
           onClick={() => setSelectedStatus(selectedStatus === leaveStatuses.PENDING ? 'ALL' : leaveStatuses.PENDING)}
+          title="Onay bekleyenleri filtrele"
         >
-          <div className="metric-header">
+          <div className="metric-left-col">
+            <div className="metric-icon-box amber"><Clock size={14} /></div>
             <span className="metric-title">Onay Bekleyenler</span>
-            <div className="metric-icon-box amber"><Clock size={18} /></div>
           </div>
           <div className="metric-numbers">
             <strong className="metric-count">{stats.pendingCount}</strong>
-            <span className="metric-days">Toplam {stats.pendingDays} Gün</span>
+            <span className="metric-days">({stats.pendingDays} Gün)</span>
           </div>
         </div>
 
         <div 
           className={`metric-card card-green ${selectedStatus === leaveStatuses.APPROVED ? 'active' : ''}`}
           onClick={() => setSelectedStatus(selectedStatus === leaveStatuses.APPROVED ? 'ALL' : leaveStatuses.APPROVED)}
+          title="Onaylananları filtrele"
         >
-          <div className="metric-header">
+          <div className="metric-left-col">
+            <div className="metric-icon-box green"><CheckCircle size={14} /></div>
             <span className="metric-title">Onaylanan İzinler</span>
-            <div className="metric-icon-box green"><CheckCircle size={18} /></div>
           </div>
           <div className="metric-numbers">
             <strong className="metric-count">{stats.approvedCount}</strong>
-            <span className="metric-days">Toplam {stats.approvedDays} Gün</span>
+            <span className="metric-days">({stats.approvedDays} Gün)</span>
           </div>
         </div>
 
         <div 
           className={`metric-card card-red ${selectedStatus === leaveStatuses.REJECTED ? 'active' : ''}`}
           onClick={() => setSelectedStatus(selectedStatus === leaveStatuses.REJECTED ? 'ALL' : leaveStatuses.REJECTED)}
+          title="Geri gönderilenleri filtrele"
         >
-          <div className="metric-header">
+          <div className="metric-left-col">
+            <div className="metric-icon-box red"><XCircle size={14} /></div>
             <span className="metric-title">Geri Gönderilenler</span>
-            <div className="metric-icon-box red"><XCircle size={18} /></div>
           </div>
           <div className="metric-numbers">
             <strong className="metric-count">{stats.rejectedCount}</strong>
-            <span className="metric-days">Revize Bekliyor</span>
+            <span className="metric-days">{stats.rejectedCount > 0 ? '(Revize Bekliyor)' : '(0 Gün)'}</span>
           </div>
         </div>
       </div>
 
-      {/* 3. FİLTRELER BARI */}
+      {/* 2. FİLTRELER BARI */}
       <div className="approvals-filter-bar">
         <div className="filter-search-box">
           <Search size={16} className="search-icon" />
@@ -335,6 +311,13 @@ const Approvals = ({ currentUser, onSwitchUser }) => {
             <option value={leaveStatuses.REJECTED}>Geri Gönderilenler ({stats.rejectedCount})</option>
             <option value={leaveStatuses.PLANNED}>Planlananlar</option>
           </select>
+
+          {currentUser?.isManager && stats.pendingCount > 0 && (
+            <button className="btn-apple-primary btn-sm-action" onClick={() => setIsBatchApproveOpen(true)}>
+              <Check size={14} />
+              <span>Bekleyen Tümünü Onayla ({stats.pendingCount})</span>
+            </button>
+          )}
         </div>
       </div>
 

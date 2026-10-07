@@ -1,0 +1,870 @@
+/* RuleModals.css - Modern, Kurumsal Kural Setleri Pop-up ve Bildirim Stilleri */
+
+/* Backdrop */
+.rule-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: ruleBackdropFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ruleBackdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-scale {
+  animation: ruleModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ruleModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Modal Card Base */
+.rule-modal-card {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 1. Header Styles */
+.rule-modal-header {
+  padding: 22px 24px 18px 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.rule-modal-header.header-notice {
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.rule-modal-header.header-error {
+  background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
+  border-bottom-color: #fee2e2;
+}
+
+.rule-modal-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.rule-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rule-icon-circle.circle-blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.rule-icon-circle.circle-red {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.rule-badge-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.header-error .rule-badge-pill {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.header-notice .rule-badge-pill {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.rule-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.2px;
+  line-height: 1.3;
+}
+
+.rule-modal-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 3px 0 0 0;
+  line-height: 1.4;
+}
+
+.rule-close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.rule-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* 2. Body Styles */
+.rule-modal-body {
+  padding: 22px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Alert Box (Error) */
+.rule-alert-box.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rule-alert-icon {
+  color: #dc2626;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rule-alert-heading {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #991b1b;
+  margin-bottom: 4px;
+}
+
+.rule-alert-text {
+  font-size: 13px;
+  color: #7f1d1d;
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+.rule-alert-hint {
+  font-size: 12px;
+  color: #991b1b;
+  background: rgba(254, 226, 226, 0.6);
+  padding: 8px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+/* Notices List */
+.rule-notices-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rule-notices-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rule-notices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rule-notice-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.rule-notice-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.rule-tag-pill {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.rule-notice-text {
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* Tarih Akışı Kartı */
+.rule-dates-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dates-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #166534;
+}
+
+.dates-range-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #dcfce7;
+}
+
+.date-flow-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.flow-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.flow-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.flow-arrow {
+  color: #10b981;
+}
+
+.flow-badge-total {
+  margin-left: auto;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.flow-days-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: #059669;
+}
+
+.dates-sunday-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #15803d;
+  line-height: 1.4;
+}
+
+/* 3. Footer Styles */
+.rule-modal-footer {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-rule-ghost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rule-ghost:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.btn-rule-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s;
+}
+
+.btn-rule-primary.btn-blue {
+  background: #2563eb;
+}
+
+.btn-rule-primary.btn-blue:hover {
+  background: #1d4ed8;
+}
+
+.btn-rule-primary.btn-red {
+  background: #dc2626;
+}
+
+.btn-rule-primary.btn-red:hover {
+  background: #b91c1c;
+}
+
+/* ========================================================
+   2. KURAL REHBERİ MODALI (RuleDirectoryModal)
+   ======================================================== */
+.rule-directory-card {
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 30px 70px -15px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  width: 100%;
+  max-width: 820px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.directory-header {
+  padding: 22px 26px 18px 26px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.directory-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.directory-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.directory-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #2563eb;
+  margin-bottom: 2px;
+}
+
+.directory-heading {
+  font-size: 19px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.directory-subheading {
+  font-size: 13px;
+  color: #64748b;
+  margin: 3px 0 0 0;
+}
+
+/* Toolbar & Arama */
+.directory-toolbar {
+  padding: 14px 26px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.directory-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  width: 280px;
+  position: relative;
+}
+
+.search-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.directory-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+  width: 100%;
+}
+
+.clear-search-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.directory-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dir-tab-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: #64748b;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dir-tab-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.dir-tab-btn.active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+  font-weight: 700;
+}
+
+/* Cards Grid */
+.directory-cards-container {
+  padding: 22px 26px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .directory-cards-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rule-detail-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s;
+}
+
+.rule-detail-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rule-code-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.rule-category-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.pill-amber { background: #fef3c7; color: #b45309; }
+.pill-blue { background: #dbeafe; color: #1d4ed8; }
+.pill-purple { background: #f3e8ff; color: #7e22ce; }
+.pill-rose { background: #ffe4e6; color: #be123c; }
+.pill-emerald { background: #d1fae5; color: #047857; }
+.pill-indigo { background: #e0e7ff; color: #3730a3; }
+.pill-cyan { background: #cffafe; color: #0e7490; }
+.pill-teal { background: #ccfbf1; color: #0f766e; }
+
+.card-rule-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.card-rule-desc {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.card-example-box {
+  background: #f8fafc;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.example-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.example-text {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.card-system-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.system-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.text-emerald { color: #059669; }
+
+/* Directory Footer */
+.directory-footer {
+  padding: 16px 26px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.footer-info-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.btn-close-directory {
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-close-directory:hover {
+  background: #1e293b;
+}
+
+/* ========================================================
+   3. ÖZEL ONAY MODALI (CustomConfirmModal)
+   ======================================================== */
+.confirm-modal-card {
+  max-width: 500px;
+}
+
+.confirm-modal-header {
+  padding: 22px 24px 18px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.confirm-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.confirm-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.confirm-modal-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 3px 0 0 0;
+  line-height: 1.4;
+}
+
+.confirm-modal-body {
+  padding: 20px 24px;
+}
+
+.confirm-details-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.details-box-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.details-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.details-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.check-bullet {
+  color: #2563eb;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.confirm-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-confirm-cancel {
+  background: #f1f5f9;
+  border: none;
+  color: #475569;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-confirm-cancel:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-confirm-submit {
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-confirm-submit.btn-blue {
+  background: #2563eb;
+}
+
+.btn-confirm-submit.btn-blue:hover {
+  background: #1d4ed8;
+}
+
+.btn-confirm-submit.btn-dark {
+  background: #0f172a;
+}
+
+.btn-confirm-submit.btn-dark:hover {
+  background: #1e293b;
+}
+
+/* Kural Setleri Butonu (Header Toolbar) */
+.btn-rules-modal-trigger {
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+  background: #ffffff !important;
+}
+
+.btn-rules-modal-trigger:hover {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1d4ed8 !important;
+}
+
+/* Banner Tıklanabilir Yapma */
+.clickable-rules-banner {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.clickable-rules-banner:hover {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+
+.rules-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  margin-top: 4px;
+}
